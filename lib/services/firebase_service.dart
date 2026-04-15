@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
+import '../models/daily_stats_model.dart';
 
 class FirebaseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -18,6 +19,66 @@ class FirebaseService {
     });
   }
 
+  // Erstellt ein Basis-Dokument für anonyme User oder falls Daten fehlen
+  Future<void> createUserDocument(User user, {String? name}) async {
+    final doc = await _db.collection('users').doc(user.uid).get();
+    if (!doc.exists) {
+      await _db.collection('users').doc(user.uid).set({
+        'email': user.email ?? '',
+        'displayName': name ?? (user.isAnonymous ? 'Gast' : 'User'),
+        'dailySteps': 0,
+        'streak': 0,
+        'groupIds': [],
+        'isAnonymous': user.isAnonymous,
+      });
+    }
+  }
+
+  Future<UserCredential?> signInAnonymously() async {
+    try {
+      UserCredential result = await _auth.signInAnonymously();
+      if (result.user != null) {
+        await createUserDocument(result.user!);
+      }
+      return result;
+    } catch (e) {
+      print("Anonym Error: $e");
+      return null;
+    }
+  }
+
+  // Abrufen der Schritte für einen spezifischen Tag
+  Stream<DailyStatsModel?> getDailyStats(String uid, String dateId) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('daily_stats')
+        .doc(dateId)
+        .snapshots()
+        .map((snap) {
+      if (snap.exists && snap.data() != null) {
+        return DailyStatsModel.fromMap(snap.data()!, snap.id);
+      }
+      return null;
+    });
+  }
+
+  // Abrufen der Statistiken für die letzten 7 Tage
+  Future<List<DailyStatsModel>> getWeeklyStats(String uid) async {
+    final now = DateTime.now();
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+
+    final query = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('daily_stats')
+        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(sevenDaysAgo))
+        .orderBy('timestamp', descending: true)
+        .get();
+
+    return query.docs.map((doc) => DailyStatsModel.fromMap(doc.data(), doc.id)).toList();
+  }
+
   Future<UserCredential?> signUp(String email, String password, String name) async {
     try {
       UserCredential result = await _auth.createUserWithEmailAndPassword(email: email, password: password);
@@ -29,6 +90,7 @@ class FirebaseService {
           'dailySteps': 0,
           'streak': 0,
           'groupIds': [],
+          'isAnonymous': false,
         });
       }
       return result;
@@ -49,7 +111,16 @@ class FirebaseService {
     await _auth.signOut();
   }
 
-  Future<void> updateSteps(String uid, int steps) async {
+  // Aktualisierte updateSteps Methode für Historie
+  Future<void> updateSteps(String uid, String dateId, int steps) async {
+    final docRef = _db.collection('users').doc(uid).collection('daily_stats').doc(dateId);
+    
+    await docRef.set({
+      'steps': steps,
+      'timestamp': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // Auch den globalen Counter für heute aktualisieren
     await _db.collection('users').doc(uid).update({'dailySteps': steps});
   }
 

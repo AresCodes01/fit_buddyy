@@ -5,6 +5,7 @@ class UserModel {
   final int dailySteps;
   final int streak;
   final List<String> groupIds;
+  final bool isAnonymous;
 
   UserModel({
     required this.id,
@@ -13,6 +14,7 @@ class UserModel {
     this.dailySteps = 0,
     this.streak = 0,
     this.groupIds = const [],
+    this.isAnonymous = false,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> data, String documentId) {
@@ -23,6 +25,7 @@ class UserModel {
       dailySteps: data['dailySteps'] ?? 0,
       streak: data['streak'] ?? 0,
       groupIds: List<String>.from(data['groupIds'] ?? []),
+      isAnonymous: data['isAnonymous'] ?? false,
     );
   }
 
@@ -33,6 +36,7 @@ class UserModel {
       'dailySteps': dailySteps,
       'streak': streak,
       'groupIds': groupIds,
+      'isAnonymous': isAnonymous,
     };
   }
 }

@@ -20,6 +20,11 @@ class _GroupScreenState extends State<GroupScreen> {
     final name = _groupNameController.text.trim();
 
     if (user != null && name.isNotEmpty) {
+      if (user.isAnonymous) {
+        _showLoginRequiredDialog();
+        return;
+      }
+
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context); // Close dialog
 
@@ -37,6 +42,29 @@ class _GroupScreenState extends State<GroupScreen> {
     }
   }
 
+  void _showLoginRequiredDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Anmeldung erforderlich'),
+        content: const Text('Um Gruppen beizutreten oder zu erstellen, musst du ein Konto erstellen.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              context.read<FirebaseService>().signOut(); // Triggers AuthWrapper to show AuthScreen
+            },
+            child: const Text('Jetzt registrieren'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _groupNameController.dispose();
@@ -49,6 +77,42 @@ class _GroupScreenState extends State<GroupScreen> {
     final db = context.read<FirebaseService>();
 
     if (user == null) return const Center(child: CircularProgressIndicator());
+
+    // UI für anonyme User
+    if (user.isAnonymous) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.group_add, size: 80, color: Colors.grey),
+              const SizedBox(height: 20),
+              const Text(
+                'Gruppen & Community',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Vergleiche deine Schritte mit Freunden und motiviert euch gegenseitig. Melde dich an, um loszulegen!',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 30),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => db.signOut(),
+                child: const Text('Jetzt registrieren / einloggen'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: StreamBuilder<List<Map<String, dynamic>>>(
@@ -87,6 +151,8 @@ class _GroupScreenState extends State<GroupScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.blueAccent,
+        foregroundColor: Colors.white,
         child: const Icon(Icons.add),
         onPressed: () => _showCreateGroupDialog(),
       ),
