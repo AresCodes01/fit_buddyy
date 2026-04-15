@@ -6,7 +6,17 @@ class FirebaseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  Stream<User?> get user => _auth.authStateChanges();
+  Stream<User?> get authState => _auth.authStateChanges();
+
+  Stream<UserModel?> getUserData(String? uid) {
+    if (uid == null) return Stream.value(null);
+    return _db.collection('users').doc(uid).snapshots().map((snap) {
+      if (snap.exists && snap.data() != null) {
+        return UserModel.fromMap(snap.data()!, snap.id);
+      }
+      return null;
+    });
+  }
 
   Future<UserCredential?> signUp(String email, String password, String name) async {
     try {
@@ -23,7 +33,6 @@ class FirebaseService {
       }
       return result;
     } catch (e) {
-      print(e.toString());
       return null;
     }
   }
@@ -32,7 +41,6 @@ class FirebaseService {
     try {
       return await _auth.signInWithEmailAndPassword(email: email, password: password);
     } catch (e) {
-      print(e.toString());
       return null;
     }
   }
@@ -41,15 +49,10 @@ class FirebaseService {
     await _auth.signOut();
   }
 
-  Stream<UserModel> getUserData(String uid) {
-    return _db.collection('users').doc(uid).snapshots().map((snap) => UserModel.fromMap(snap.data()!, snap.id));
-  }
-
   Future<void> updateSteps(String uid, int steps) async {
     await _db.collection('users').doc(uid).update({'dailySteps': steps});
   }
 
-  // Group Methods
   Future<void> createGroup(String name, String userId) async {
     DocumentReference groupRef = await _db.collection('groups').add({
       'name': name,
@@ -65,13 +68,6 @@ class FirebaseService {
     if (groupIds.isEmpty) return Stream.value([]);
     return _db.collection('groups').where(FieldPath.documentId, whereIn: groupIds).snapshots().map((snap) =>
         snap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList());
-  }
-
-  Stream<List<UserModel>> getGroupMembers(List<dynamic> memberIds) {
-    if (memberIds.isEmpty) return Stream.value([]);
-    // Firestore 'whereIn' supports up to 10-30 IDs depending on version/config
-    return _db.collection('users').where(FieldPath.documentId, whereIn: memberIds).snapshots().map((snap) =>
-        snap.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList());
   }
 
   Future<void> sendMessage(String groupId, String userId, String userName, String message) async {

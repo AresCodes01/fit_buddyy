@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -19,12 +20,26 @@ class FitBuddyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final firebaseService = FirebaseService();
+
     return MultiProvider(
       providers: [
-        Provider<FirebaseService>(create: (_) => FirebaseService()),
+        Provider<FirebaseService>.value(value: firebaseService),
+        StreamProvider<User?>(
+          create: (_) => firebaseService.authState,
+          initialData: null,
+        ),
+        StreamProvider<UserModel?>(
+          create: (context) {
+            final User? user = Provider.of<User?>(context, listen: false);
+            return firebaseService.getUserData(user?.uid);
+          },
+          initialData: null,
+        ),
       ],
       child: MaterialApp(
         title: 'Fit Buddy',
+        debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primarySwatch: Colors.blue,
           useMaterial3: true,
@@ -40,31 +55,23 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<FirebaseService>(context);
-    return StreamBuilder(
-      stream: authService.user,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-        if (snapshot.hasData) {
-          return StreamBuilder<UserModel>(
-            stream: authService.getUserData(snapshot.data!.uid),
-            builder: (context, userSnapshot) {
-              if (!userSnapshot.hasData) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-              return MainNavigation(user: userSnapshot.data!);
-            },
-          );
-        }
-        return const AuthScreen();
-      },
-    );
+    final user = Provider.of<User?>(context);
+    final userModel = Provider.of<UserModel?>(context);
+
+    if (user == null) {
+      return const AuthScreen();
+    }
+
+    if (userModel == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    return const MainNavigation();
   }
 }
 
 class MainNavigation extends StatefulWidget {
-  final UserModel user;
-  const MainNavigation({super.key, required this.user});
+  const MainNavigation({super.key});
 
   @override
   State<MainNavigation> createState() => _MainNavigationState();
@@ -76,9 +83,9 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> children = [
-      Dashboard(user: widget.user),
-      WorkoutScreen(user: widget.user),
-      GroupScreen(user: widget.user),
+      const Dashboard(),
+      const WorkoutScreen(),
+      const GroupScreen(),
     ];
 
     return Scaffold(
@@ -87,7 +94,7 @@ class _MainNavigationState extends State<MainNavigation> {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () => FirebaseService().signOut(),
+            onPressed: () => context.read<FirebaseService>().signOut(),
           )
         ],
       ),

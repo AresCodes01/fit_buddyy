@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../services/firebase_service.dart';
 import '../services/step_tracker_service.dart';
 
 class Dashboard extends StatefulWidget {
-  final UserModel user;
-  const Dashboard({super.key, required this.user});
+  const Dashboard({super.key});
 
   @override
   State<Dashboard> createState() => _DashboardState();
@@ -13,17 +13,25 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   final StepTrackerService _stepService = StepTrackerService();
-  final FirebaseService _db = FirebaseService();
   int _currentSteps = 0;
 
   @override
   void initState() {
     super.initState();
-    _currentSteps = widget.user.dailySteps;
-    _initSteps();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initSteps();
+    });
   }
 
   void _initSteps() async {
+    if (!mounted) return;
+    final userModel = Provider.of<UserModel?>(context, listen: false);
+    if (userModel == null) return;
+    
+    setState(() {
+      _currentSteps = userModel.dailySteps;
+    });
+    
     bool granted = await _stepService.requestPermission();
     if (granted && mounted) {
       _stepService.initStepTracking((steps) {
@@ -31,7 +39,7 @@ class _DashboardState extends State<Dashboard> {
           setState(() {
             _currentSteps = steps;
           });
-          _db.updateSteps(widget.user.id, steps);
+          context.read<FirebaseService>().updateSteps(userModel.id, steps);
         }
       });
     }
@@ -39,6 +47,10 @@ class _DashboardState extends State<Dashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final user = Provider.of<UserModel?>(context);
+    
+    if (user == null) return const Center(child: CircularProgressIndicator());
+
     return Scaffold(
       body: Center(
         child: Column(
@@ -53,7 +65,7 @@ class _DashboardState extends State<Dashboard> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.local_fire_department, color: Colors.orange),
-                Text(' Streak: ${widget.user.streak} Tage', style: const TextStyle(fontSize: 20)),
+                Text(' Streak: ${user.streak} Tage', style: const TextStyle(fontSize: 20)),
               ],
             ),
           ],
