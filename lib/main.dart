@@ -67,7 +67,7 @@ class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key, required this.user});
 
   @override
-  _MainNavigationState createState() => _MainNavigationState();
+  State<MainNavigation> createState() => _MainNavigationState();
 }
 
 class _MainNavigationState extends State<MainNavigation> {

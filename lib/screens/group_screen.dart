@@ -8,7 +8,7 @@ class GroupScreen extends StatefulWidget {
   const GroupScreen({super.key, required this.user});
 
   @override
-  _GroupScreenState createState() => _GroupScreenState();
+  State<GroupScreen> createState() => _GroupScreenState();
 }
 
 class _GroupScreenState extends State<GroupScreen> {
@@ -19,6 +19,7 @@ class _GroupScreenState extends State<GroupScreen> {
     if (_groupNameController.text.isNotEmpty) {
       await _db.createGroup(_groupNameController.text, widget.user.id);
       _groupNameController.clear();
+      if (!mounted) return;
       Navigator.pop(context);
     }
   }

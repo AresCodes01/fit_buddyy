@@ -8,7 +8,7 @@ class Dashboard extends StatefulWidget {
   const Dashboard({super.key, required this.user});
 
   @override
-  _DashboardState createState() => _DashboardState();
+  State<Dashboard> createState() => _DashboardState();
 }
 
 class _DashboardState extends State<Dashboard> {
@@ -25,12 +25,14 @@ class _DashboardState extends State<Dashboard> {
 
   void _initSteps() async {
     bool granted = await _stepService.requestPermission();
-    if (granted) {
+    if (granted && mounted) {
       _stepService.initStepTracking((steps) {
-        setState(() {
-          _currentSteps = steps;
-        });
-        _db.updateSteps(widget.user.id, steps);
+        if (mounted) {
+          setState(() {
+            _currentSteps = steps;
+          });
+          _db.updateSteps(widget.user.id, steps);
+        }
       });
     }
   }
