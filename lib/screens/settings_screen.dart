@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/firebase_service.dart';
 import '../models/user_model.dart';
+import '../widgets/common_widgets.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,7 +19,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final userModel = Provider.of<UserModel?>(context);
     final db = Provider.of<FirebaseService>(context);
 
-    if (userModel == null) return const Center(child: CircularProgressIndicator());
+    if (userModel == null) return const LoadingSpinner();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Einstellungen')),
@@ -27,7 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
           _buildProfileSection(userModel),
           const Divider(),
-          _buildStepGoalSection(userModel, db),
+          _buildInfoSection(userModel),
           const Divider(),
           _buildWorkoutGoalSection(userModel, db),
           const Divider(),
@@ -55,37 +56,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildStepGoalSection(UserModel user, FirebaseService db) {
+  Widget _buildInfoSection(UserModel user) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text('Schritt-Ziele', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+        const SectionTitle("Dein Fortschritt"),
+        ListTile(
+          leading: const Icon(Icons.flash_on, color: Colors.amber),
+          title: const Text("Punkte-System"),
+          subtitle: const Text("Du erhältst 1 XP pro 100 Schritte und Bonus bei 10.000 Schritten."),
         ),
         ListTile(
-          title: const Text('Ziel-Typ'),
-          subtitle: Text(user.goalType == 'interval' ? 'Punkte pro Intervall' : 'Tagesziel-Bonus'),
-          trailing: DropdownButton<String>(
-            value: user.goalType,
-            items: const [
-              DropdownMenuItem(value: 'interval', child: Text('Intervall')),
-              DropdownMenuItem(value: 'target', child: Text('Tagesziel')),
-            ],
-            onChanged: (val) {
-              if (val != null) {
-                db.updateGoals(user.id, val, user.goalValue);
-              }
-            },
-          ),
-        ),
-        ListTile(
-          title: const Text('Ziel-Wert'),
-          subtitle: Text('${user.goalValue} Schritte'),
-          trailing: TextButton(
-            child: Text('${user.goalValue}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            onPressed: () => _showStepValueDialog(user, db),
-          ),
+          leading: const Icon(Icons.ac_unit, color: Colors.lightBlueAccent),
+          title: const Text("Streak Freezer"),
+          subtitle: Text("Du hast aktuell ${user.streakFreezers} Freezer übrig."),
         ),
       ],
     );
@@ -95,13 +79,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text('Workout-Ziele', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-        ),
+        const SectionTitle("Wöchentliches Workout-Ziel"),
         ListTile(
-          title: const Text('Wochenziel'),
-          subtitle: Text('${user.workoutGoalWeekly} Workouts pro Woche'),
+          title: const Text('Ziel setzen'),
+          subtitle: Text('${user.workoutGoalWeekly} Workouts pro Woche geplant'),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -126,11 +107,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildThemeSection(ThemeProvider theme) {
-    return SwitchListTile(
-      title: const Text('Dark Mode'),
-      secondary: Icon(theme.isDarkMode ? Icons.dark_mode : Icons.light_mode),
-      value: theme.isDarkMode,
-      onChanged: (bool value) => theme.toggleTheme(value),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionTitle("Design"),
+        SwitchListTile(
+          title: const Text('Dark Mode'),
+          secondary: Icon(theme.isDarkMode ? Icons.dark_mode : Icons.light_mode),
+          value: theme.isDarkMode,
+          onChanged: (bool value) => theme.toggleTheme(value),
+        ),
+      ],
     );
   }
 
@@ -149,34 +136,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: () => db.signOut(),
         ),
       ],
-    );
-  }
-
-  void _showStepValueDialog(UserModel user, FirebaseService db) {
-    final controller = TextEditingController(text: user.goalValue.toString());
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(user.goalType == 'interval' ? 'Intervall anpassen' : 'Tagesziel anpassen'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Wert eingeben'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
-          ElevatedButton(
-            onPressed: () {
-              final val = int.tryParse(controller.text);
-              if (val != null) {
-                db.updateGoals(user.id, user.goalType, val);
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Speichern'),
-          ),
-        ],
-      ),
     );
   }
 }

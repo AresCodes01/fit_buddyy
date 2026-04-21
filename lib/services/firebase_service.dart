@@ -21,29 +21,27 @@ class FirebaseService {
         'level': 1,
         'points': 0,
         'dailySteps': 0,
+        'weeklySteps': 0, // Neu für Wochen-Ranking
         'streak': 0,
         'groupIds': [],
         'isAnonymous': user.isAnonymous,
-        'goalType': 'interval',
-        'goalValue': 100,
         'workoutGoalWeekly': 3,
         'workoutsThisWeek': 0,
+        'streakFreezers': 0,
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
   }
 
-  Stream<UserModel?> getUserData(String? uid) {
-    if (uid == null) return Stream.value(null);
+  Stream<UserModel?> getUserData(String uid) {
     return _db.collection('users').doc(uid).snapshots().map((snap) {
       if (snap.exists && snap.data() != null) return UserModel.fromMap(snap.data()!, snap.id);
       return null;
     });
   }
 
-  Future<void> _updateUser(String uid, Map<String, dynamic> data) => _db.collection('users').doc(uid).update(data);
-  Future<void> updateGoals(String uid, String goalType, int goalValue) => _updateUser(uid, {'goalType': goalType, 'goalValue': goalValue});
-  Future<void> updateWorkoutGoal(String uid, int weeklyGoal) => _updateUser(uid, {'workoutGoalWeekly': weeklyGoal});
+  Future<void> updateWorkoutGoal(String uid, int weeklyGoal) => 
+      _db.collection('users').doc(uid).update({'workoutGoalWeekly': weeklyGoal});
 
   Future<UserCredential?> signInAnonymously() async {
     try {
@@ -83,14 +81,7 @@ class FirebaseService {
     }
   }
 
-  Future<UserCredential?> signIn(String email, String password) async {
-    try {
-      return await _auth.signInWithEmailAndPassword(email: email, password: password);
-    } catch (e) {
-      return null;
-    }
-  }
-
+  Future<UserCredential?> signIn(String email, String password) => _auth.signInWithEmailAndPassword(email: email, password: password);
   Future<void> signOut() => _auth.signOut();
 
   Future<void> updateSteps(String uid, String dateId, int steps) async {
@@ -98,24 +89,50 @@ class FirebaseService {
     if (!userDoc.exists) return;
 
     final userData = userDoc.data()!;
-    final goalType = userData['goalType'] ?? 'interval';
-    final goalValue = userData['goalValue'] ?? 100;
-    int points = userData['points'] ?? 0;
+    int totalPoints = userData['points'] ?? 0;
+    int oldLevel = userData['level'] ?? 1;
+    int streakFreezers = userData['streakFreezers'] ?? 0;
+    List<dynamic> groupIds = userData['groupIds'] ?? [];
+    String displayName = userData['displayName'] ?? 'User';
 
-    if (goalType == 'interval') {
-      points = (steps / goalValue).floor();
-    } else if (goalType == 'target' && steps >= goalValue) {
-      points += 50; 
-    }
+    int newXP = (steps / 100).floor() + (steps >= 10000 ? 50 : 0);
+    int oldSteps = userData['dailySteps'] ?? 0;
+    int oldXPFromSteps = (oldSteps / 100).floor() + (oldSteps >= 10000 ? 50 : 0);
+    int diffXP = newXP - oldXPFromSteps;
+
+    int newTotalPoints = totalPoints + diffXP;
+    int newLevel = (newTotalPoints / 500).floor() + 1;
+    
+    // Wochen-Schritte Update (Einfachheitshalber summieren wir hier grob auf)
+    // In einer echten App würde man dies präziser über die history machen.
+    int weeklySteps = (userData['weeklySteps'] ?? 0) + (steps - oldSteps);
 
     WriteBatch batch = _db.batch();
+    
+    if (newLevel > oldLevel) {
+      streakFreezers += 1;
+      for (String gId in groupIds) {
+        DocumentReference msgRef = _db.collection('groups').doc(gId).collection('messages').doc();
+        batch.set(msgRef, {
+          'senderId': uid, 'senderName': 'System',
+          'text': "🎉 $displayName ist gerade auf Level $newLevel aufgestiegen!",
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
     batch.set(_db.collection('users').doc(uid).collection('daily_stats').doc(dateId), {
       'steps': steps, 'timestamp': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
     batch.update(_db.collection('users').doc(uid), {
-      'dailySteps': steps, 'points': points, 'level': (points / 500).floor() + 1,
+      'dailySteps': steps, 
+      'weeklySteps': weeklySteps,
+      'points': newTotalPoints, 
+      'level': newLevel,
+      'streakFreezers': streakFreezers,
     });
+    
     await batch.commit();
   }
 
@@ -143,16 +160,11 @@ class FirebaseService {
         snap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList());
   }
 
-  // WICHTIG: Mitglieder einer Gruppe laden
   Stream<List<UserModel>> getGroupMembers(String groupId) {
     return _db.collection('groups').doc(groupId).snapshots().asyncMap((snap) async {
       final List<dynamic> memberIds = snap.data()?['members'] ?? [];
       if (memberIds.isEmpty) return [];
-      
-      final memberSnaps = await _db.collection('users')
-          .where(FieldPath.documentId, whereIn: memberIds)
-          .get();
-          
+      final memberSnaps = await _db.collection('users').where(FieldPath.documentId, whereIn: memberIds).get();
       return memberSnaps.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList();
     });
   }

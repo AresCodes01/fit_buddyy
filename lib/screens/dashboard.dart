@@ -18,6 +18,7 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   final StepTrackerService _stepService = StepTrackerService();
   int _todayLiveSteps = 0;
+  int? _lastSeenLevel;
 
   @override
   void initState() {
@@ -28,6 +29,7 @@ class _DashboardState extends State<Dashboard> {
   void _initLiveStepTracking() async {
     final userModel = Provider.of<UserModel?>(context, listen: false);
     if (userModel == null) return;
+    _lastSeenLevel = userModel.level;
 
     bool granted = await _stepService.requestPermission();
     if (granted && mounted) {
@@ -41,6 +43,46 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
+  void _checkLevelUp(int currentLevel) {
+    if (_lastSeenLevel != null && currentLevel > _lastSeenLevel!) {
+      _lastSeenLevel = currentLevel;
+      Future.delayed(Duration.zero, () {
+        _showLevelUpDialog(currentLevel);
+      });
+    }
+  }
+
+  void _showLevelUpDialog(int level) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("🎉", style: TextStyle(fontSize: 50)),
+            const Text("LEVEL UP!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Text("Du hast Level $level erreicht!", style: const TextStyle(fontSize: 18)),
+            const SizedBox(height: 20),
+            ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text("Weiter so!")),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showInfoDialog(String title, String content) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<UserModel?>(context);
@@ -48,6 +90,7 @@ class _DashboardState extends State<Dashboard> {
     final db = context.read<FirebaseService>();
 
     if (user == null) return const LoadingSpinner();
+    _checkLevelUp(user.level);
 
     return Scaffold(
       body: SafeArea(
@@ -77,27 +120,40 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Widget _buildHeader(UserModel user) {
+    double xpProgress = (user.points % 500) / 500.0;
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Moin,", style: TextStyle(fontSize: 16, color: Colors.grey[600])),
-            Text(user.displayName, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.star, color: Theme.of(context).colorScheme.primary, size: 18),
-              const SizedBox(width: 4),
-              Text("Lvl ${user.level}", style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text("Moin,", style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+              Text(user.displayName, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+        GestureDetector(
+          onTap: () => _showInfoDialog("Level Info", "Du steigst alle 500 XP ein Level auf. Aktuell fehlen dir noch ${500 - (user.points % 500)} XP."),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text("Lvl ${user.level}", style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: 80,
+                child: LinearProgressIndicator(
+                  value: xpProgress,
+                  minHeight: 6,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
             ],
           ),
         ),
@@ -109,18 +165,9 @@ class _DashboardState extends State<Dashboard> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
-          onPressed: provider.previousDay,
-        ),
-        Text(
-          provider.formattedDate,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-        ),
-        IconButton(
-          icon: const Icon(Icons.arrow_forward_ios, size: 18),
-          onPressed: provider.nextDay,
-        ),
+        IconButton(icon: const Icon(Icons.arrow_back_ios, size: 18), onPressed: provider.previousDay),
+        Text(provider.formattedDate, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+        IconButton(icon: const Icon(Icons.arrow_forward_ios, size: 18), onPressed: provider.nextDay),
       ],
     );
   }
@@ -132,44 +179,31 @@ class _DashboardState extends State<Dashboard> {
         int steps = provider.isToday ? (_todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0)) : (snapshot.data?.steps ?? 0);
         double progress = (steps / user.goalValue).clamp(0.0, 1.0);
 
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Theme.of(context).colorScheme.primary, Theme.of(context).colorScheme.primary.withOpacity(0.7)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+        return GestureDetector(
+          onTap: () => _showInfoDialog("Tagesziel", "Dein aktuelles Ziel sind ${user.goalValue} Schritte. Du kannst dies in den Einstellungen ändern."),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Theme.of(context).colorScheme.primary, Theme.of(context).colorScheme.primary.withOpacity(0.7)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
             ),
-            borderRadius: BorderRadius.circular(30),
-            boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.directions_walk, color: Colors.white, size: 28),
-                  SizedBox(width: 10),
-                  Text("Heutige Schritte", style: TextStyle(color: Colors.white, fontSize: 18)),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Text("$steps", style: const TextStyle(color: Colors.white, fontSize: 50, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              LinearProgressIndicator(
-                value: progress,
-                backgroundColor: Colors.white.withOpacity(0.3),
-                color: Colors.white,
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "Ziel: ${user.goalValue} Schritte (${(progress * 100).toInt()}%)",
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(children: [Icon(Icons.directions_walk, color: Colors.white, size: 28), SizedBox(width: 10), Text("Heutige Schritte", style: TextStyle(color: Colors.white, fontSize: 18))]),
+                const SizedBox(height: 20),
+                Text("$steps", style: const TextStyle(color: Colors.white, fontSize: 50, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                LinearProgressIndicator(value: progress, backgroundColor: Colors.white.withOpacity(0.3), color: Colors.white, minHeight: 8, borderRadius: BorderRadius.circular(10)),
+                const SizedBox(height: 12),
+                Text("Ziel: ${user.goalValue} (${(progress * 100).toInt()}%)", style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              ],
+            ),
           ),
         );
       },
@@ -180,36 +214,36 @@ class _DashboardState extends State<Dashboard> {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      crossAxisSpacing: 15,
-      mainAxisSpacing: 15,
-      childAspectRatio: 1.5,
+      crossAxisCount: 2, crossAxisSpacing: 15, mainAxisSpacing: 15, childAspectRatio: 1.5,
       children: [
-        _buildStatTile("Streak", "${user.streak} Tage", Icons.local_fire_department, Colors.orange),
-        _buildStatTile("Workouts", "${user.workoutsThisWeek}/${user.workoutGoalWeekly}", Icons.fitness_center, Colors.blue),
-        _buildStatTile("Punkte", "${user.points}", Icons.emoji_events, Colors.amber),
-        _buildStatTile("XP bis Up", "${500 - (user.points % 500)}", Icons.trending_up, Colors.purple),
+        _buildStatTile("Streak", "${user.streak} Tage", Icons.local_fire_department, Colors.orange, () => _showInfoDialog("Serie", "Deine Streak zeigt an, wie viele Tage in Folge du aktiv warst. Nutze Streak Freezer (du hast ${user.streakFreezers}), um sie zu schützen!")),
+        _buildStatTile("Workouts", "${user.workoutsThisWeek}/${user.workoutGoalWeekly}", Icons.fitness_center, Colors.blue, () => _showInfoDialog("Wochenziel", "Du hast dir vorgenommen, ${user.workoutGoalWeekly} Workouts pro Woche zu machen. Los geht's!")),
+        _buildStatTile("Punkte", "${user.points}", Icons.emoji_events, Colors.amber, () => _showInfoDialog("Punkte", "XP sammelst du durch Schritte und Workouts. Jedes neue Level schenkt dir einen Streak Freezer!")),
+        _buildStatTile("Freezer", "${user.streakFreezers}", Icons.ac_unit, Colors.lightBlueAccent, () => _showInfoDialog("Streak Freezer", "Ein Freezer schützt deine Serie automatisch, wenn du dein Ziel mal einen Tag lang nicht erreichst.")),
       ],
     );
   }
 
-  Widget _buildStatTile(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.light ? Colors.white : Colors.grey[900],
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-        ],
+  Widget _buildStatTile(String label, String value, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).brightness == Brightness.light ? Colors.white : Colors.grey[900],
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+          ],
+        ),
       ),
     );
   }
@@ -226,25 +260,12 @@ class _DashboardState extends State<Dashboard> {
             final stats = snapshot.data!;
             return BarChart(
               BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: 12000,
+                alignment: BarChartAlignment.spaceAround, maxY: 15000,
                 barTouchData: BarTouchData(enabled: true),
                 titlesData: const FlTitlesData(show: false),
                 gridData: const FlGridData(show: false),
                 borderData: FlBorderData(show: false),
-                barGroups: stats.asMap().entries.map((e) {
-                  return BarChartGroupData(
-                    x: e.key,
-                    barRods: [
-                      BarChartRodData(
-                        toY: e.value.steps.toDouble(),
-                        color: Theme.of(context).colorScheme.primary,
-                        width: 10,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ],
-                  );
-                }).toList(),
+                barGroups: stats.asMap().entries.map((e) => BarChartGroupData(x: e.key, barRods: [BarChartRodData(toY: e.value.steps.toDouble(), color: Theme.of(context).colorScheme.primary, width: 10, borderRadius: BorderRadius.circular(4))])).toList(),
               ),
             );
           },

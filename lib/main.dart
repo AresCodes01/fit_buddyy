@@ -20,7 +20,7 @@ void main() async {
     await initializeDateFormatting('de_DE', null);
     runApp(const FitBuddyApp());
   } catch (e) {
-    runApp(MaterialApp(home: Scaffold(body: Center(child: Text("Fehler: $e")))));
+    runApp(MaterialApp(home: Scaffold(body: Center(child: Text("Startfehler: $e")))));
   }
 }
 
@@ -30,10 +30,6 @@ class FitBuddyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final firebaseService = FirebaseService();
-
-    // "Eco Pulse" Farbpalette
-    const Color primaryTeal = Color(0xFF00BFA5);
-    const Color lightBg = Color(0xFFF0FDF4); // Ganz zarter Grün-Stich
 
     return MultiProvider(
       providers: [
@@ -45,58 +41,34 @@ class FitBuddyApp extends StatelessWidget {
           initialData: null,
         ),
       ],
-      child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, child) {
-          return MaterialApp(
-            title: 'Fit Buddy',
-            debugShowCheckedModeBanner: false,
-            themeMode: themeProvider.themeMode,
-            theme: ThemeData(
-              useMaterial3: true,
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: primaryTeal,
-                brightness: Brightness.light,
-                primary: primaryTeal,
-              ),
-              scaffoldBackgroundColor: lightBg,
-            ),
-            darkTheme: ThemeData(
-              useMaterial3: true,
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: primaryTeal,
-                brightness: Brightness.dark,
-              ),
-              scaffoldBackgroundColor: const Color(0xFF0A1210), // Sehr dunkles Teal-Schwarz
-            ),
-            home: const AuthWrapper(),
-          );
-        },
-      ),
+      child: const RootApp(),
     );
   }
 }
 
-class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({super.key});
+class RootApp extends StatelessWidget {
+  const RootApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     final firebaseUser = Provider.of<User?>(context);
-    final firebaseService = Provider.of<FirebaseService>(context);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final firebaseService = Provider.of<FirebaseService>(context, listen: false);
 
     if (firebaseUser == null) {
-      return const AuthScreen();
+      return MaterialApp(
+        title: 'Fit Buddy',
+        debugShowCheckedModeBanner: false,
+        theme: _buildTheme(Brightness.light),
+        home: const AuthScreen(),
+      );
     }
 
     return FutureBuilder(
       future: firebaseService.syncOrCreateUser(firebaseUser),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-
-        if (snapshot.hasError) {
-          return Scaffold(body: Center(child: Text("Initialisierungsfehler: ${snapshot.error}")));
+          return MaterialApp(home: Scaffold(body: Center(child: CircularProgressIndicator(color: const Color(0xFF00BFA5)))));
         }
 
         return StreamProvider<UserModel?>(
@@ -105,14 +77,34 @@ class AuthWrapper extends StatelessWidget {
           initialData: null,
           child: Consumer<UserModel?>(
             builder: (context, userModel, child) {
-              if (userModel == null) {
-                return const Scaffold(body: Center(child: CircularProgressIndicator()));
-              }
-              return const MainNavigation();
+              return MaterialApp(
+                title: 'Fit Buddy',
+                debugShowCheckedModeBanner: false,
+                themeMode: themeProvider.themeMode,
+                theme: _buildTheme(Brightness.light),
+                darkTheme: _buildTheme(Brightness.dark),
+                home: userModel == null 
+                  ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+                  : const MainNavigation(),
+              );
             },
           ),
         );
       },
+    );
+  }
+
+  ThemeData _buildTheme(Brightness brightness) {
+    const primaryColor = Color(0xFF00BFA5);
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: primaryColor,
+        brightness: brightness,
+        primary: primaryColor,
+      ),
+      scaffoldBackgroundColor: brightness == Brightness.light ? const Color(0xFFF0FDF4) : const Color(0xFF0A1210),
     );
   }
 }

@@ -4,19 +4,17 @@ class UserModel {
   final String displayName;
   final String photoUrl;
   final int dailySteps;
+  final int weeklySteps; // Neu hinzugefügt
   final int streak;
   final int level;
   final int points;
   final List<String> groupIds;
   final bool isAnonymous;
-  
-  // Schritt-Ziele
   final String goalType; 
   final int goalValue;
-
-  // Workout-Ziele (Anzahl Workouts pro Woche)
   final int workoutGoalWeekly;
   final int workoutsThisWeek;
+  final int streakFreezers;
 
   UserModel({
     required this.id,
@@ -24,6 +22,7 @@ class UserModel {
     required this.displayName,
     this.photoUrl = '',
     this.dailySteps = 0,
+    this.weeklySteps = 0,
     this.streak = 0,
     this.level = 1,
     this.points = 0,
@@ -33,6 +32,7 @@ class UserModel {
     this.goalValue = 100,
     this.workoutGoalWeekly = 3,
     this.workoutsThisWeek = 0,
+    this.streakFreezers = 0,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> data, String documentId) {
@@ -42,6 +42,7 @@ class UserModel {
       displayName: data['displayName'] ?? '',
       photoUrl: data['photoUrl'] ?? '',
       dailySteps: data['dailySteps'] ?? 0,
+      weeklySteps: data['weeklySteps'] ?? 0,
       streak: data['streak'] ?? 0,
       level: data['level'] ?? 1,
       points: data['points'] ?? 0,
@@ -51,6 +52,7 @@ class UserModel {
       goalValue: data['goalValue'] ?? 100,
       workoutGoalWeekly: data['workoutGoalWeekly'] ?? 3,
       workoutsThisWeek: data['workoutsThisWeek'] ?? 0,
+      streakFreezers: data['streakFreezers'] ?? 0,
     );
   }
 
@@ -60,6 +62,7 @@ class UserModel {
       'displayName': displayName,
       'photoUrl': photoUrl,
       'dailySteps': dailySteps,
+      'weeklySteps': weeklySteps,
       'streak': streak,
       'level': level,
       'points': points,
@@ -69,6 +72,7 @@ class UserModel {
       'goalValue': goalValue,
       'workoutGoalWeekly': workoutGoalWeekly,
       'workoutsThisWeek': workoutsThisWeek,
+      'streakFreezers': streakFreezers,
     };
   }
 }
