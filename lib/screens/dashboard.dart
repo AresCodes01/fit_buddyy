@@ -6,6 +6,7 @@ import '../models/daily_stats_model.dart';
 import '../services/firebase_service.dart';
 import '../services/step_tracker_service.dart';
 import '../providers/dashboard_provider.dart';
+import '../widgets/common_widgets.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -32,14 +33,8 @@ class _DashboardState extends State<Dashboard> {
     if (granted && mounted) {
       _stepService.initStepTracking((steps) {
         if (mounted) {
-          final provider = Provider.of<DashboardProvider>(context, listen: false);
-          setState(() {
-            _todayLiveSteps = steps;
-          });
-          // Nur in Firebase speichern, wenn wir gerade den heutigen Tag betrachten
-          // Oder immer speichern, aber die UI zeigt den historischen Wert
-          // Best practice: Immer speichern für das heutige Datum
-          final todayId = provider.isToday ? provider.dateId : DateTime.now().toString().split(' ')[0];
+          setState(() => _todayLiveSteps = steps);
+          final todayId = DateTime.now().toString().split(' ')[0];
           context.read<FirebaseService>().updateSteps(userModel.id, todayId, steps);
         }
       });
@@ -52,26 +47,61 @@ class _DashboardState extends State<Dashboard> {
     final dashboardProvider = Provider.of<DashboardProvider>(context);
     final db = context.read<FirebaseService>();
 
-    if (user == null) return const Center(child: CircularProgressIndicator());
+    if (user == null) return const LoadingSpinner();
 
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-              _buildDateNavigation(context, dashboardProvider),
-              const SizedBox(height: 40),
-              _buildStepCircle(dashboardProvider, db, user.id),
-              const SizedBox(height: 40),
-              _buildWeeklyChart(db, user.id),
+              _buildHeader(user),
               const SizedBox(height: 20),
-              _buildStatsRow(user),
+              _buildDateNavigation(context, dashboardProvider),
+              const SizedBox(height: 20),
+              _buildMainStepCard(dashboardProvider, db, user),
+              const SizedBox(height: 25),
+              const SectionTitle("Dein Status"),
+              _buildStatsGrid(user),
+              const SizedBox(height: 25),
+              const SectionTitle("Wochen-Trend"),
+              _buildWeeklyChart(db, user.id),
+              const SizedBox(height: 30),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader(UserModel user) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Moin,", style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+            Text(user.displayName, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.star, color: Theme.of(context).colorScheme.primary, size: 18),
+              const SizedBox(width: 4),
+              Text("Lvl ${user.level}", style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -80,141 +110,146 @@ class _DashboardState extends State<Dashboard> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.blueAccent),
+          icon: const Icon(Icons.arrow_back_ios, size: 18),
           onPressed: provider.previousDay,
         ),
-        Column(
-          children: [
-            Text(
-              provider.formattedDate,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            if (!provider.isToday)
-              TextButton(
-                onPressed: provider.goToToday,
-                child: const Text("Zurück zu Heute", style: TextStyle(color: Colors.blueAccent)),
-              ),
-          ],
+        Text(
+          provider.formattedDate,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
         IconButton(
-          icon: const Icon(Icons.arrow_forward_ios, color: Colors.blueAccent),
+          icon: const Icon(Icons.arrow_forward_ios, size: 18),
           onPressed: provider.nextDay,
         ),
       ],
     );
   }
 
-  Widget _buildStepCircle(DashboardProvider provider, FirebaseService db, String uid) {
+  Widget _buildMainStepCard(DashboardProvider provider, FirebaseService db, UserModel user) {
     return StreamBuilder<DailyStatsModel?>(
-      stream: db.getDailyStats(uid, provider.dateId),
+      stream: db.getDailyStats(user.id, provider.dateId),
       builder: (context, snapshot) {
-        int steps = 0;
-        if (provider.isToday) {
-          steps = _todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0);
-        } else {
-          steps = snapshot.data?.steps ?? 0;
-        }
+        int steps = provider.isToday ? (_todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0)) : (snapshot.data?.steps ?? 0);
+        double progress = (steps / user.goalValue).clamp(0.0, 1.0);
 
         return Container(
-          width: 250,
-          height: 250,
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.blueAccent.withOpacity(0.2), width: 15),
-          ),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.directions_walk, size: 50, color: Colors.blueAccent),
-                Text(
-                  '$steps',
-                  style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
-                ),
-                const Text("Schritte", style: TextStyle(color: Colors.grey, fontSize: 18)),
-              ],
+            gradient: LinearGradient(
+              colors: [Theme.of(context).colorScheme.primary, Theme.of(context).colorScheme.primary.withOpacity(0.7)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.directions_walk, color: Colors.white, size: 28),
+                  SizedBox(width: 10),
+                  Text("Heutige Schritte", style: TextStyle(color: Colors.white, fontSize: 18)),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text("$steps", style: const TextStyle(color: Colors.white, fontSize: 50, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              LinearProgressIndicator(
+                value: progress,
+                backgroundColor: Colors.white.withOpacity(0.3),
+                color: Colors.white,
+                minHeight: 8,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "Ziel: ${user.goalValue} Schritte (${(progress * 100).toInt()}%)",
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ],
           ),
         );
       },
     );
   }
 
+  Widget _buildStatsGrid(UserModel user) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      crossAxisSpacing: 15,
+      mainAxisSpacing: 15,
+      childAspectRatio: 1.5,
+      children: [
+        _buildStatTile("Streak", "${user.streak} Tage", Icons.local_fire_department, Colors.orange),
+        _buildStatTile("Workouts", "${user.workoutsThisWeek}/${user.workoutGoalWeekly}", Icons.fitness_center, Colors.blue),
+        _buildStatTile("Punkte", "${user.points}", Icons.emoji_events, Colors.amber),
+        _buildStatTile("XP bis Up", "${500 - (user.points % 500)}", Icons.trending_up, Colors.purple),
+      ],
+    );
+  }
+
+  Widget _buildStatTile(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.light ? Colors.white : Colors.grey[900],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        ],
+      ),
+    );
+  }
+
   Widget _buildWeeklyChart(FirebaseService db, String uid) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text("Letzte 7 Tage", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 20),
-        SizedBox(
-          height: 200,
-          child: FutureBuilder<List<DailyStatsModel>>(
-            future: db.getWeeklyStats(uid),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-              
-              final stats = snapshot.data!;
-              return BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: 15000, // Beispielziel
-                  barTouchData: BarTouchData(enabled: false),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (double value, TitleMeta meta) {
-                          return const Text(""); // Vereinfacht für dieses Beispiel
-                        },
+    return CustomCard(
+      padding: const EdgeInsets.all(20),
+      child: SizedBox(
+        height: 150,
+        child: FutureBuilder<List<DailyStatsModel>>(
+          future: db.getWeeklyStats(uid),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const LoadingSpinner();
+            final stats = snapshot.data!;
+            return BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: 12000,
+                barTouchData: BarTouchData(enabled: true),
+                titlesData: const FlTitlesData(show: false),
+                gridData: const FlGridData(show: false),
+                borderData: FlBorderData(show: false),
+                barGroups: stats.asMap().entries.map((e) {
+                  return BarChartGroupData(
+                    x: e.key,
+                    barRods: [
+                      BarChartRodData(
+                        toY: e.value.steps.toDouble(),
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 10,
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                    ),
-                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  ),
-                  gridData: const FlGridData(show: false),
-                  borderData: FlBorderData(show: false),
-                  barGroups: stats.asMap().entries.map((e) {
-                    return BarChartGroupData(
-                      x: e.key,
-                      barRods: [
-                        BarChartRodData(
-                          toY: e.value.steps.toDouble(),
-                          color: Colors.blueAccent,
-                          width: 15,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              );
-            },
-          ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            );
+          },
         ),
-      ],
-    );
-  }
-
-  Widget _buildStatsRow(UserModel user) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        _buildStatItem("Streak", "${user.streak} Tage", Icons.local_fire_department, Colors.orange),
-        _buildStatItem("Ziel", "10.000", Icons.flag, Colors.green),
-      ],
-    );
-  }
-
-  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 30),
-        const SizedBox(height: 5),
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        Text(label, style: const TextStyle(color: Colors.grey)),
-      ],
+      ),
     );
   }
 }

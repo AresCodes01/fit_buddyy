@@ -31,6 +31,10 @@ class FitBuddyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final firebaseService = FirebaseService();
 
+    // "Eco Pulse" Farbpalette
+    const Color primaryTeal = Color(0xFF00BFA5);
+    const Color lightBg = Color(0xFFF0FDF4); // Ganz zarter Grün-Stich
+
     return MultiProvider(
       providers: [
         Provider<FirebaseService>.value(value: firebaseService),
@@ -48,16 +52,21 @@ class FitBuddyApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             themeMode: themeProvider.themeMode,
             theme: ThemeData(
-              brightness: Brightness.light,
-              primarySwatch: Colors.blue,
               useMaterial3: true,
-              scaffoldBackgroundColor: Colors.white,
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: primaryTeal,
+                brightness: Brightness.light,
+                primary: primaryTeal,
+              ),
+              scaffoldBackgroundColor: lightBg,
             ),
             darkTheme: ThemeData(
-              brightness: Brightness.dark,
-              primarySwatch: Colors.blue,
               useMaterial3: true,
-              scaffoldBackgroundColor: Colors.black,
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: primaryTeal,
+                brightness: Brightness.dark,
+              ),
+              scaffoldBackgroundColor: const Color(0xFF0A1210), // Sehr dunkles Teal-Schwarz
             ),
             home: const AuthWrapper(),
           );
@@ -79,43 +88,31 @@ class AuthWrapper extends StatelessWidget {
       return const AuthScreen();
     }
 
-    return StreamProvider<UserModel?>(
-      key: ValueKey(firebaseUser.uid),
-      create: (_) => firebaseService.getUserData(firebaseUser.uid),
-      initialData: null,
-      catchError: (context, error) {
-        // Dies fängt Firestore-Fehler ab (z.B. PERMISSION_DENIED)
-        return null; 
+    return FutureBuilder(
+      future: firebaseService.syncOrCreateUser(firebaseUser),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(body: Center(child: Text("Initialisierungsfehler: ${snapshot.error}")));
+        }
+
+        return StreamProvider<UserModel?>(
+          key: ValueKey(firebaseUser.uid),
+          create: (_) => firebaseService.getUserData(firebaseUser.uid),
+          initialData: null,
+          child: Consumer<UserModel?>(
+            builder: (context, userModel, child) {
+              if (userModel == null) {
+                return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              }
+              return const MainNavigation();
+            },
+          ),
+        );
       },
-      child: Consumer<UserModel?>(
-        builder: (context, userModel, child) {
-          if (userModel == null) {
-            return Scaffold(
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 20),
-                    const Text("Lade Profil..."),
-                    const SizedBox(height: 10),
-                    const Text(
-                      "Hinweis: Wenn dies länger dauert, ist die Firebase-Datenbank eventuell noch nicht bereit.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    TextButton(
-                      onPressed: () => firebaseService.signOut(),
-                      child: const Text("Abbrechen & Logout"),
-                    )
-                  ],
-                ),
-              ),
-            );
-          }
-          return const MainNavigation();
-        },
-      ),
     );
   }
 }
@@ -144,7 +141,7 @@ class _MainNavigationState extends State<MainNavigation> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
-        selectedItemColor: Colors.blueAccent,
+        selectedItemColor: Theme.of(context).colorScheme.primary,
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         items: const [

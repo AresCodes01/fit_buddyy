@@ -13,8 +13,12 @@ class GroupScreen extends StatefulWidget {
 
 class _GroupScreenState extends State<GroupScreen> {
   final _groupNameController = TextEditingController();
+  final _joinIdController = TextEditingController();
+  bool _isCreating = false;
 
   void _createGroup() async {
+    if (_isCreating) return;
+
     final user = Provider.of<UserModel?>(context, listen: false);
     final db = context.read<FirebaseService>();
     final name = _groupNameController.text.trim();
@@ -25,19 +29,45 @@ class _GroupScreenState extends State<GroupScreen> {
         return;
       }
 
+      setState(() => _isCreating = true);
       final messenger = ScaffoldMessenger.of(context);
-      Navigator.pop(context); // Close dialog
-
+      
       try {
         await db.createGroup(name, user.id);
-        _groupNameController.clear();
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Gruppe erfolgreich erstellt!')),
-        );
+        if (mounted) {
+          Navigator.pop(context); // Dialog schließen
+          _groupNameController.clear();
+          messenger.showSnackBar(const SnackBar(content: Text('Gruppe erfolgreich erstellt!')));
+        }
       } catch (e) {
-        messenger.showSnackBar(
-          SnackBar(content: Text('Fehler: $e')),
-        );
+        messenger.showSnackBar(SnackBar(content: Text('Fehler: $e')));
+      } finally {
+        if (mounted) setState(() => _isCreating = false);
+      }
+    }
+  }
+
+  void _joinGroup() async {
+    final user = Provider.of<UserModel?>(context, listen: false);
+    final db = context.read<FirebaseService>();
+    final groupId = _joinIdController.text.trim();
+
+    if (user != null && groupId.isNotEmpty) {
+      if (user.isAnonymous) {
+        _showLoginRequiredDialog();
+        return;
+      }
+
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await db.joinGroup(groupId, user.id);
+        if (mounted) {
+          Navigator.pop(context);
+          _joinIdController.clear();
+          messenger.showSnackBar(const SnackBar(content: Text('Erfolgreich beigetreten!')));
+        }
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text('Fehler: $e')));
       }
     }
   }
@@ -49,14 +79,11 @@ class _GroupScreenState extends State<GroupScreen> {
         title: const Text('Anmeldung erforderlich'),
         content: const Text('Um Gruppen beizutreten oder zu erstellen, musst du ein Konto erstellen.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Abbrechen'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              context.read<FirebaseService>().signOut(); // Triggers AuthWrapper to show AuthScreen
+              context.read<FirebaseService>().signOut();
             },
             child: const Text('Jetzt registrieren'),
           ),
@@ -68,6 +95,7 @@ class _GroupScreenState extends State<GroupScreen> {
   @override
   void dispose() {
     _groupNameController.dispose();
+    _joinIdController.dispose();
     super.dispose();
   }
 
@@ -78,43 +106,21 @@ class _GroupScreenState extends State<GroupScreen> {
 
     if (user == null) return const Center(child: CircularProgressIndicator());
 
-    // UI für anonyme User
     if (user.isAnonymous) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.group_add, size: 80, color: Colors.grey),
-              const SizedBox(height: 20),
-              const Text(
-                'Gruppen & Community',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Vergleiche deine Schritte mit Freunden und motiviert euch gegenseitig. Melde dich an, um loszulegen!',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () => db.signOut(),
-                child: const Text('Jetzt registrieren / einloggen'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildGuestView(db);
     }
 
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Gruppen'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.group_add),
+            onPressed: _showJoinGroupDialog,
+            tooltip: 'Beitreten',
+          ),
+        ],
+      ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: db.getGroups(user.groupIds),
         builder: (context, snapshot) {
@@ -125,7 +131,17 @@ class _GroupScreenState extends State<GroupScreen> {
           final groups = snapshot.data ?? [];
           
           if (groups.isEmpty) {
-            return const Center(child: Text('Tritt einer Gruppe bei oder erstelle eine!'));
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.group_off, size: 64, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text('Noch keine Gruppen.', style: TextStyle(color: Colors.grey)),
+                  Text('Erstelle eine oder tritt einer bei!'),
+                ],
+              ),
+            );
           }
 
           return ListView.builder(
@@ -133,9 +149,10 @@ class _GroupScreenState extends State<GroupScreen> {
             itemBuilder: (context, index) {
               final group = groups[index];
               return ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.group)),
+                leading: const CircleAvatar(backgroundColor: Colors.blueAccent, child: Icon(Icons.group, color: Colors.white)),
                 title: Text(group['name']),
-                subtitle: Text('${(group['members'] as List).length} Mitglieder'),
+                subtitle: Text('${(group['members'] as List).length} Mitglieder - ID: ${group['id'].toString().substring(0, 5)}...'),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -159,25 +176,62 @@ class _GroupScreenState extends State<GroupScreen> {
     );
   }
 
+  Widget _buildGuestView(FirebaseService db) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.group_add, size: 80, color: Colors.grey),
+            const SizedBox(height: 20),
+            const Text('Gruppen & Community', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            const Text('Vergleiche deine Schritte mit Freunden. Melde dich an, um loszulegen!', textAlign: TextAlign.center),
+            const SizedBox(height: 30),
+            ElevatedButton(onPressed: () => db.signOut(), child: const Text('Jetzt registrieren')),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showCreateGroupDialog() {
     showDialog(
       context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Neue Gruppe'),
+          content: TextField(
+            controller: _groupNameController, 
+            decoration: const InputDecoration(hintText: 'Gruppenname'),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+            if (_isCreating)
+              const CircularProgressIndicator()
+            else
+              ElevatedButton(onPressed: _createGroup, child: const Text('Erstellen')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showJoinGroupDialog() {
+    showDialog(
+      context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Neue Gruppe'),
+        title: const Text('Gruppe beitreten'),
         content: TextField(
-          controller: _groupNameController, 
-          decoration: const InputDecoration(hintText: 'Gruppenname'),
+          controller: _joinIdController, 
+          decoration: const InputDecoration(hintText: 'Gruppen-ID eingeben', helperText: 'Frage einen Freund nach seiner ID'),
           autofocus: true,
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: const Text('Abbrechen'),
-          ),
-          ElevatedButton(
-            onPressed: _createGroup, 
-            child: const Text('Erstellen'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+          ElevatedButton(onPressed: _joinGroup, child: const Text('Beitreten')),
         ],
       ),
     );
