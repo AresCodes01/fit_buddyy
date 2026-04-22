@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/theme_provider.dart';
 import '../services/firebase_service.dart';
 import '../models/user_model.dart';
@@ -13,6 +14,67 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  bool _isGenerating = false;
+
+  void _generateTestData() async {
+    setState(() => _isGenerating = true);
+    final user = Provider.of<UserModel?>(context, listen: false);
+    final db = FirebaseFirestore.instance;
+
+    if (user != null) {
+      final now = DateTime.now();
+      WriteBatch batch = db.batch();
+
+      for (int i = 0; i < 7; i++) {
+        final date = now.subtract(Duration(days: i));
+        final dateId = date.toString().split(' ')[0]; // YYYY-MM-DD
+        final steps = 3000 + (i * 1200) % 7000; 
+
+        DocumentReference ref = db.collection('users').doc(user.id).collection('daily_stats').doc(dateId);
+        batch.set(ref, {
+          'steps': steps,
+          'timestamp': Timestamp.fromDate(date), // WICHTIG: Unterschiedliche Zeitstempel!
+        });
+      }
+
+      await batch.commit();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Test-Daten für 7 unterschiedliche Tage erstellt! 🔥')),
+        );
+      }
+    }
+    setState(() => _isGenerating = false);
+  }
+
+  void _showStepGoalDialog(UserModel user, FirebaseService db) {
+    final controller = TextEditingController(text: user.goalValue.toString());
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tagesziel anpassen'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Anzahl Schritte', suffixText: 'Schritte'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+          ElevatedButton(
+            onPressed: () {
+              final val = int.tryParse(controller.text);
+              if (val != null && val > 0) {
+                db.updateStepGoal(user.id, val);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Speichern'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -28,11 +90,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
           _buildProfileSection(userModel),
           const Divider(),
-          _buildInfoSection(userModel),
+          _buildGoalSection(userModel, db),
           const Divider(),
           _buildWorkoutGoalSection(userModel, db),
           const Divider(),
           _buildThemeSection(themeProvider),
+          const Divider(),
+          _buildInfoSection(userModel),
+          const Divider(),
+          _buildDeveloperSection(),
           const Divider(),
           _buildAccountSection(userModel, db),
         ],
@@ -56,15 +122,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildGoalSection(UserModel user, FirebaseService db) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionTitle("Schritt-Ziele"),
+        ListTile(
+          leading: const Icon(Icons.flag_outlined, color: Colors.blueAccent),
+          title: const Text('Dein Tagesziel'),
+          subtitle: Text('${user.goalValue} Schritte pro Tag'),
+          trailing: TextButton(
+            child: const Text("Ändern", style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: () => _showStepGoalDialog(user, db),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildInfoSection(UserModel user) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionTitle("Dein Fortschritt"),
-        ListTile(
-          leading: const Icon(Icons.flash_on, color: Colors.amber),
-          title: const Text("Punkte-System"),
-          subtitle: const Text("Du erhältst 1 XP pro 100 Schritte und Bonus bei 10.000 Schritten."),
+        const ListTile(
+          leading: Icon(Icons.flash_on, color: Colors.amber),
+          title: Text("Punkte-System"),
+          subtitle: Text("Du erhältst 1 XP pro 100 Schritte und Bonus bei Erreichen deines Ziels."),
         ),
         ListTile(
           leading: const Icon(Icons.ac_unit, color: Colors.lightBlueAccent),
@@ -81,8 +165,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         const SectionTitle("Wöchentliches Workout-Ziel"),
         ListTile(
-          title: const Text('Ziel setzen'),
-          subtitle: Text('${user.workoutGoalWeekly} Workouts pro Woche geplant'),
+          leading: const Icon(Icons.fitness_center, color: Colors.blueAccent),
+          title: const Text('Workouts pro Woche'),
+          subtitle: Text('${user.workoutGoalWeekly} Einheiten geplant'),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -121,18 +206,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildDeveloperSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionTitle("Entwickler Tools"),
+        ListTile(
+          leading: const Icon(Icons.bug_report, color: Colors.orange),
+          title: const Text("Wochen-Trend testen"),
+          subtitle: const Text("Erzeugt zufällige Schritte für die letzten 7 Tage"),
+          trailing: _isGenerating 
+            ? const CircularProgressIndicator() 
+            : const Icon(Icons.play_arrow),
+          onTap: _generateTestData,
+        ),
+      ],
+    );
+  }
+
   Widget _buildAccountSection(UserModel user, FirebaseService db) {
     return Column(
       children: [
         if (user.isAnonymous)
           ListTile(
             leading: const Icon(Icons.app_registration, color: Colors.green),
-            title: const Text('Jetzt registrieren'),
+            title: const Text("Jetzt registrieren"),
             onTap: () => db.signOut(),
           ),
         ListTile(
           leading: const Icon(Icons.logout, color: Colors.redAccent),
-          title: const Text('Abmelden'),
+          title: const Text("Abmelden"),
           onTap: () => db.signOut(),
         ),
       ],

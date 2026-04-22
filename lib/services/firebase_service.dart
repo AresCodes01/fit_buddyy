@@ -21,13 +21,14 @@ class FirebaseService {
         'level': 1,
         'points': 0,
         'dailySteps': 0,
-        'weeklySteps': 0, // Neu für Wochen-Ranking
+        'weeklySteps': 0,
         'streak': 0,
         'groupIds': [],
         'isAnonymous': user.isAnonymous,
         'workoutGoalWeekly': 3,
         'workoutsThisWeek': 0,
         'streakFreezers': 0,
+        'goalValue': 10000, // Standard-Tagesziel
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
@@ -40,8 +41,14 @@ class FirebaseService {
     });
   }
 
-  Future<void> updateWorkoutGoal(String uid, int weeklyGoal) => 
-      _db.collection('users').doc(uid).update({'workoutGoalWeekly': weeklyGoal});
+  Future<void> updateWorkoutGoal(String uid, int weeklyGoal) async {
+    await _db.collection('users').doc(uid).update({'workoutGoalWeekly': weeklyGoal});
+  }
+
+  // NEU: Tagesziel für Schritte aktualisieren
+  Future<void> updateStepGoal(String uid, int goal) async {
+    await _db.collection('users').doc(uid).update({'goalValue': goal});
+  }
 
   Future<UserCredential?> signInAnonymously() async {
     try {
@@ -51,21 +58,6 @@ class FirebaseService {
     } catch (e) {
       return null;
     }
-  }
-
-  Stream<DailyStatsModel?> getDailyStats(String uid, String dateId) {
-    return _db.collection('users').doc(uid).collection('daily_stats').doc(dateId).snapshots().map((snap) {
-      if (snap.exists && snap.data() != null) return DailyStatsModel.fromMap(snap.data()!, snap.id);
-      return null;
-    });
-  }
-
-  Future<List<DailyStatsModel>> getWeeklyStats(String uid) async {
-    final now = DateTime.now();
-    final query = await _db.collection('users').doc(uid).collection('daily_stats')
-        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(now.subtract(const Duration(days: 7))))
-        .orderBy('timestamp', descending: true).get();
-    return query.docs.map((doc) => DailyStatsModel.fromMap(doc.data(), doc.id)).toList();
   }
 
   Future<UserCredential?> signUp(String email, String password, String name) async {
@@ -82,7 +74,25 @@ class FirebaseService {
   }
 
   Future<UserCredential?> signIn(String email, String password) => _auth.signInWithEmailAndPassword(email: email, password: password);
-  Future<void> signOut() => _auth.signOut();
+  Future<void> signOut() async {
+    await _auth.signOut();
+  }
+
+  Stream<DailyStatsModel?> getDailyStats(String uid, String dateId) {
+    return _db.collection('users').doc(uid).collection('daily_stats').doc(dateId).snapshots().map((snap) {
+      if (snap.exists && snap.data() != null) return DailyStatsModel.fromMap(snap.data()!, snap.id);
+      return null;
+    });
+  }
+
+  Stream<List<DailyStatsModel>> getWeeklyStatsStream(String uid) {
+    final now = DateTime.now();
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    return _db.collection('users').doc(uid).collection('daily_stats')
+        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(sevenDaysAgo))
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) => DailyStatsModel.fromMap(doc.data(), doc.id)).toList());
+  }
 
   Future<void> updateSteps(String uid, String dateId, int steps) async {
     final userDoc = await _db.collection('users').doc(uid).get();
@@ -92,19 +102,21 @@ class FirebaseService {
     int totalPoints = userData['points'] ?? 0;
     int oldLevel = userData['level'] ?? 1;
     int streakFreezers = userData['streakFreezers'] ?? 0;
+    int goalValue = userData['goalValue'] ?? 10000;
     List<dynamic> groupIds = userData['groupIds'] ?? [];
     String displayName = userData['displayName'] ?? 'User';
 
-    int newXP = (steps / 100).floor() + (steps >= 10000 ? 50 : 0);
+    int newXP = (steps / 100).floor();
+    if (steps >= goalValue) {
+      newXP += 50;
+    }
+
     int oldSteps = userData['dailySteps'] ?? 0;
-    int oldXPFromSteps = (oldSteps / 100).floor() + (oldSteps >= 10000 ? 50 : 0);
+    int oldXPFromSteps = (oldSteps / 100).floor() + (oldSteps >= goalValue ? 50 : 0);
     int diffXP = newXP - oldXPFromSteps;
 
     int newTotalPoints = totalPoints + diffXP;
     int newLevel = (newTotalPoints / 500).floor() + 1;
-    
-    // Wochen-Schritte Update (Einfachheitshalber summieren wir hier grob auf)
-    // In einer echten App würde man dies präziser über die history machen.
     int weeklySteps = (userData['weeklySteps'] ?? 0) + (steps - oldSteps);
 
     WriteBatch batch = _db.batch();
@@ -186,10 +198,11 @@ class FirebaseService {
         .map((snap) => snap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList());
   }
 
-  Future<void> sendMessage(String gId, String uId, String uName, String msg) =>
-    _db.collection('groups').doc(gId).collection('messages').add({
+  Future<void> sendMessage(String gId, String uId, String uName, String msg) async {
+    await _db.collection('groups').doc(gId).collection('messages').add({
       'senderId': uId, 'senderName': uName, 'text': msg, 'timestamp': FieldValue.serverTimestamp(),
     });
+  }
 
   Stream<QuerySnapshot> getMessages(String gId) =>
     _db.collection('groups').doc(gId).collection('messages').orderBy('timestamp', descending: true).snapshots();

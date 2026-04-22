@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import '../models/user_model.dart';
 import '../models/daily_stats_model.dart';
 import '../services/firebase_service.dart';
@@ -252,20 +253,74 @@ class _DashboardState extends State<Dashboard> {
     return CustomCard(
       padding: const EdgeInsets.all(20),
       child: SizedBox(
-        height: 150,
-        child: FutureBuilder<List<DailyStatsModel>>(
-          future: db.getWeeklyStats(uid),
+        height: 180,
+        child: StreamBuilder<List<DailyStatsModel>>(
+          stream: db.getWeeklyStatsStream(uid),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) return const LoadingSpinner();
+            if (snapshot.hasError) return const Center(child: Text("Warte auf Daten..."));
+            if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text("Noch keine Wochendaten."));
+
             final stats = snapshot.data!;
+            // Wir sortieren die Daten nach Zeitstempel aufsteigend für das Diagramm
+            stats.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+            double maxSteps = 10000;
+            for (var s in stats) { if (s.steps > maxSteps) maxSteps = s.steps.toDouble(); }
+
             return BarChart(
               BarChartData(
-                alignment: BarChartAlignment.spaceAround, maxY: 15000,
-                barTouchData: BarTouchData(enabled: true),
-                titlesData: const FlTitlesData(show: false),
+                alignment: BarChartAlignment.spaceAround,
+                maxY: maxSteps * 1.2,
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => Theme.of(context).colorScheme.primary,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      return BarTooltipItem("${rod.toY.toInt()}", const TextStyle(color: Colors.white, fontWeight: FontWeight.bold));
+                    }
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (double value, TitleMeta meta) {
+                        int index = value.toInt();
+                        if (index >= 0 && index < stats.length) {
+                           final date = stats[index].timestamp;
+                           // Wir nutzen ein einfaches Padding statt SideTitleWidget, um Inkompatibilitäten zu vermeiden
+                           return Padding(
+                             padding: const EdgeInsets.only(top: 8.0),
+                             child: Text(
+                               DateFormat('E', 'de_DE').format(date), 
+                               style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)
+                             ),
+                           );
+                        }
+                        return const Text("");
+                      },
+                    ),
+                  ),
+                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                ),
                 gridData: const FlGridData(show: false),
                 borderData: FlBorderData(show: false),
-                barGroups: stats.asMap().entries.map((e) => BarChartGroupData(x: e.key, barRods: [BarChartRodData(toY: e.value.steps.toDouble(), color: Theme.of(context).colorScheme.primary, width: 10, borderRadius: BorderRadius.circular(4))])).toList(),
+                barGroups: stats.asMap().entries.map((e) {
+                  final isToday = DateFormat('yyyy-MM-dd').format(e.value.timestamp) == DateFormat('yyyy-MM-dd').format(DateTime.now());
+                  return BarChartGroupData(
+                    x: e.key,
+                    barRods: [
+                      BarChartRodData(
+                        toY: e.value.steps.toDouble(),
+                        color: isToday ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                        width: 14,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ],
+                  );
+                }).toList(),
               ),
             );
           },
