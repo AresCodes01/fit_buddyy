@@ -260,8 +260,17 @@ class _DashboardState extends State<Dashboard> {
             if (snapshot.hasError) return const Center(child: Text("Warte auf Daten..."));
             if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text("Noch keine Wochendaten."));
 
-            final stats = snapshot.data!;
-            // Wir sortieren die Daten nach Zeitstempel aufsteigend für das Diagramm
+            // DATEN-CLEANUP: Wir gruppieren die Daten nach EINDEUTIGEM Tag
+            final Map<String, DailyStatsModel> uniqueStats = {};
+            for (var stat in snapshot.data!) {
+              final dayKey = DateFormat('yyyy-MM-dd').format(stat.timestamp);
+              // Falls zwei Einträge für einen Tag existieren, behalte den mit mehr Schritten
+              if (!uniqueStats.containsKey(dayKey) || stat.steps > uniqueStats[dayKey]!.steps) {
+                uniqueStats[dayKey] = stat;
+              }
+            }
+            
+            final stats = uniqueStats.values.toList();
             stats.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
             double maxSteps = 10000;
@@ -288,7 +297,6 @@ class _DashboardState extends State<Dashboard> {
                         int index = value.toInt();
                         if (index >= 0 && index < stats.length) {
                            final date = stats[index].timestamp;
-                           // Wir nutzen ein einfaches Padding statt SideTitleWidget, um Inkompatibilitäten zu vermeiden
                            return Padding(
                              padding: const EdgeInsets.only(top: 8.0),
                              child: Text(
