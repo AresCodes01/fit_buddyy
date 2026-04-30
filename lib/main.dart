@@ -12,12 +12,19 @@ import 'screens/group_screen.dart';
 import 'screens/workout_screen.dart';
 import 'screens/settings_screen.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'services/background_service.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     await Firebase.initializeApp();
     await initializeDateFormatting('de_DE', null);
+    
+    // Hintergrunddienst initialisieren
+    BackgroundService.init();
+
     runApp(const FitBuddyApp());
   } catch (e) {
     runApp(MaterialApp(home: Scaffold(body: Center(child: Text("Startfehler: $e")))));
@@ -120,6 +127,22 @@ class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _startBackgroundTracking();
+  }
+
+  void _startBackgroundTracking() async {
+    // Permission für Activity Recognition anfragen
+    final status = await Permission.activityRecognition.request();
+    if (status.isGranted) {
+      // Kurze Verzögerung für stabilen Start
+      await Future.delayed(const Duration(seconds: 1));
+      await BackgroundService.start();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final List<Widget> children = [
       const Dashboard(),
@@ -128,20 +151,22 @@ class _MainNavigationState extends State<MainNavigation> {
       const SettingsScreen(),
     ];
 
-    return Scaffold(
-      body: children[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: 'Workouts'),
-          BottomNavigationBarItem(icon: Icon(Icons.group), label: 'Gruppen'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Einstellungen'),
-        ],
+    return WithForegroundTask(
+      child: Scaffold(
+        body: children[_currentIndex],
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          selectedItemColor: Theme.of(context).colorScheme.primary,
+          unselectedItemColor: Colors.grey,
+          type: BottomNavigationBarType.fixed,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: 'Workouts'),
+            BottomNavigationBarItem(icon: Icon(Icons.group), label: 'Gruppen'),
+            BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Einstellungen'),
+          ],
+        ),
       ),
     );
   }

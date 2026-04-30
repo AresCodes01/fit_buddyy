@@ -9,6 +9,9 @@ import '../services/step_tracker_service.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/common_widgets.dart';
 
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'dart:isolate';
+
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
 
@@ -16,32 +19,58 @@ class Dashboard extends StatefulWidget {
   State<Dashboard> createState() => _DashboardState();
 }
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 class _DashboardState extends State<Dashboard> {
-  final StepTrackerService _stepService = StepTrackerService();
   int _todayLiveSteps = 0;
   int? _lastSeenLevel;
+  ReceivePort? _receivePort;
 
   @override
   void initState() {
     super.initState();
-    _initLiveStepTracking();
+    _loadInitialSteps();
+    _initBackgroundListener();
   }
 
-  void _initLiveStepTracking() async {
+  void _loadInitialSteps() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _todayLiveSteps = prefs.getInt('last_known_steps') ?? 0;
+      });
+    }
+  }
+
+  void _initBackgroundListener() async {
     final userModel = Provider.of<UserModel?>(context, listen: false);
     if (userModel == null) return;
     _lastSeenLevel = userModel.level;
 
-    bool granted = await _stepService.requestPermission();
-    if (granted && mounted) {
-      _stepService.initStepTracking((steps) {
-        if (mounted) {
-          setState(() => _todayLiveSteps = steps);
+    // Wir warten kurz, falls der Service gerade erst startet
+    int retry = 0;
+    while (!(await FlutterForegroundTask.isRunningService) && retry < 5) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      retry++;
+    }
+
+    if (await FlutterForegroundTask.isRunningService) {
+      _receivePort = FlutterForegroundTask.receivePort;
+      _receivePort?.listen((message) {
+        if (message is int && mounted) {
+          setState(() => _todayLiveSteps = message);
+          
           final todayId = DateTime.now().toString().split(' ')[0];
-          context.read<FirebaseService>().updateSteps(userModel.id, todayId, steps);
+          context.read<FirebaseService>().updateSteps(userModel.id, todayId, message);
         }
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _receivePort?.close();
+    super.dispose();
   }
 
   void _checkLevelUp(int currentLevel) {
