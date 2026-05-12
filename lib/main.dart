@@ -133,9 +133,13 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void _startBackgroundTracking() async {
-    // Permission für Activity Recognition anfragen
-    final status = await Permission.activityRecognition.request();
-    if (status.isGranted) {
+    // Permission für Benachrichtigungen (Android 13+) und Activity Recognition anfragen
+    await [
+      Permission.notification,
+      Permission.activityRecognition,
+    ].request();
+
+    if (await Permission.activityRecognition.isGranted) {
       // Kurze Verzögerung für stabilen Start
       await Future.delayed(const Duration(seconds: 1));
       await BackgroundService.start();

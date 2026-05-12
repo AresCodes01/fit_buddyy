@@ -5,12 +5,11 @@ import 'package:intl/intl.dart';
 import '../models/user_model.dart';
 import '../models/daily_stats_model.dart';
 import '../services/firebase_service.dart';
-import '../services/step_tracker_service.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/common_widgets.dart';
-
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'dart:isolate';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -18,8 +17,6 @@ class Dashboard extends StatefulWidget {
   @override
   State<Dashboard> createState() => _DashboardState();
 }
-
-import 'package:shared_preferences/shared_preferences.dart';
 
 class _DashboardState extends State<Dashboard> {
   int _todayLiveSteps = 0;
