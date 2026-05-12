@@ -7,6 +7,7 @@ import '../models/daily_stats_model.dart';
 import '../services/firebase_service.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/common_widgets.dart';
+import 'chat_screen.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'dart:isolate';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -112,8 +113,8 @@ class _DashboardState extends State<Dashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final user = Provider.of<UserModel?>(context);
-    final dashboardProvider = Provider.of<DashboardProvider>(context);
+    final user = context.select<UserModel?, UserModel?>((u) => u);
+    final dashboardProvider = context.select<DashboardProvider, DashboardProvider>((p) => p);
     final db = context.read<FirebaseService>();
 
     if (user == null) return const LoadingSpinner();
@@ -121,26 +122,65 @@ class _DashboardState extends State<Dashboard> {
 
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              _buildHeader(user),
-              const SizedBox(height: 20),
-              _buildDateNavigation(context, dashboardProvider),
-              const SizedBox(height: 20),
-              _buildMainStepCard(dashboardProvider, db, user),
-              const SizedBox(height: 25),
-              const SectionTitle("Dein Status"),
-              _buildStatsGrid(user),
-              const SizedBox(height: 25),
-              const SectionTitle("Wochen-Trend"),
-              _buildWeeklyChart(db, user.id),
-              const SizedBox(height: 30),
-            ],
-          ),
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  const SizedBox(height: 20),
+                  _buildHeader(user),
+                  const SizedBox(height: 10),
+                  _buildDateNavigation(context, dashboardProvider),
+                  const SizedBox(height: 30),
+                  _buildProgressRing(provider: dashboardProvider, db: db, user: user),
+                  const SizedBox(height: 30),
+                  const SectionTitle("Dein Status"),
+                ]),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: _buildStatsGrid(user, dashboardProvider, db),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 30, 20, 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Deine Gruppen",
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blueAccent),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        // In einer realen App würde man hier den TabController steuern
+                      },
+                      child: const Text("Alle zeigen"),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 160,
+                child: _buildGroupSwiper(user, db),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  const SizedBox(height: 25),
+                  const SectionTitle("Wochen-Trend"),
+                  _buildWeeklyChart(db, user.id),
+                  const SizedBox(height: 30),
+                ]),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -199,37 +239,186 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget _buildMainStepCard(DashboardProvider provider, FirebaseService db, UserModel user) {
+  Widget _buildProgressRing({
+    required DashboardProvider provider,
+    required FirebaseService db,
+    required UserModel user,
+  }) {
     return StreamBuilder<DailyStatsModel?>(
       stream: db.getDailyStats(user.id, provider.dateId),
       builder: (context, snapshot) {
-        int steps = provider.isToday ? (_todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0)) : (snapshot.data?.steps ?? 0);
+        int steps = provider.isToday 
+            ? (_todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0)) 
+            : (snapshot.data?.steps ?? 0);
         double progress = (steps / user.goalValue).clamp(0.0, 1.0);
 
-        return GestureDetector(
-          onTap: () => _showInfoDialog("Tagesziel", "Dein aktuelles Ziel sind ${user.goalValue} Schritte. Du kannst dies in den Einstellungen ändern."),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Theme.of(context).colorScheme.primary, Theme.of(context).colorScheme.primary.withOpacity(0.7)],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
+        return Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 200,
+                height: 200,
+                child: CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 14,
+                  strokeCap: StrokeCap.round,
+                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(children: [Icon(Icons.directions_walk, color: Colors.white, size: 28), SizedBox(width: 10), Text("Heutige Schritte", style: TextStyle(color: Colors.white, fontSize: 18))]),
-                const SizedBox(height: 20),
-                Text("$steps", style: const TextStyle(color: Colors.white, fontSize: 50, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                LinearProgressIndicator(value: progress, backgroundColor: Colors.white.withOpacity(0.3), color: Colors.white, minHeight: 8, borderRadius: BorderRadius.circular(10)),
-                const SizedBox(height: 12),
-                Text("Ziel: ${user.goalValue} (${(progress * 100).toInt()}%)", style: const TextStyle(color: Colors.white70, fontSize: 14)),
-              ],
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.directions_walk, size: 28, color: Colors.grey),
+                  const SizedBox(height: 4),
+                  Text(
+                    "$steps",
+                    style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    "von ${user.goalValue}",
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGroupSwiper(UserModel user, FirebaseService db) {
+    if (user.groupIds.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.group_off, color: Colors.grey, size: 32),
+            const SizedBox(height: 8),
+            Text("Noch in keiner Gruppe", style: TextStyle(color: Colors.grey[600])),
+          ],
+        ),
+      );
+    }
+
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: db.getGroups(user.groupIds),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final groups = snapshot.data!;
+
+        return PageView.builder(
+          controller: PageController(viewportFraction: 0.85),
+          itemCount: groups.length,
+          itemBuilder: (context, index) {
+            final group = groups[index];
+            return _buildGroupCard(group, user, db);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildGroupCard(Map<String, dynamic> group, UserModel currentUser, FirebaseService db) {
+    return StreamBuilder<List<UserModel>>(
+      stream: db.getGroupMembers(group['id']),
+      builder: (context, snapshot) {
+        int rank = 0;
+        int totalMembers = 0;
+        int topSteps = 0;
+
+        if (snapshot.hasData) {
+          final members = snapshot.data!;
+          totalMembers = members.length;
+          members.sort((a, b) => b.dailySteps.compareTo(a.dailySteps));
+          rank = members.indexWhere((m) => m.id == currentUser.id) + 1;
+          topSteps = members.isNotEmpty ? members.first.dailySteps : 0;
+        }
+
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ChatScreen(
+                  groupId: group['id'],
+                  groupName: group['name'],
+                ),
+              ),
+            );
+          },
+          child: Card(
+            margin: const EdgeInsets.only(right: 12, bottom: 8, top: 8),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            elevation: 2,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                gradient: LinearGradient(
+                  colors: [
+                    Theme.of(context).colorScheme.surface,
+                    Theme.of(context).colorScheme.primaryContainer.withOpacity(0.1),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        child: const Icon(Icons.group, color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          group['name'],
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right, color: Colors.grey),
+                    ],
+                  ),
+                  const Spacer(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Dein Rang", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                          Text(
+                            rank > 0 ? "#$rank von $totalMembers" : "- / -",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text("Top-Leistung", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                          Text(
+                            "$topSteps",
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -237,40 +426,55 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget _buildStatsGrid(UserModel user) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2, crossAxisSpacing: 15, mainAxisSpacing: 15, childAspectRatio: 1.5,
-      children: [
-        _buildStatTile("Streak", "${user.streak} Tage", Icons.local_fire_department, Colors.orange, () => _showInfoDialog("Serie", "Deine Streak zeigt an, wie viele Tage in Folge du aktiv warst. Nutze Streak Freezer (du hast ${user.streakFreezers}), um sie zu schützen!")),
-        _buildStatTile("Workouts", "${user.workoutsThisWeek}/${user.workoutGoalWeekly}", Icons.fitness_center, Colors.blue, () => _showInfoDialog("Wochenziel", "Du hast dir vorgenommen, ${user.workoutGoalWeekly} Workouts pro Woche zu machen. Los geht's!")),
-        _buildStatTile("Punkte", "${user.points}", Icons.emoji_events, Colors.amber, () => _showInfoDialog("Punkte", "XP sammelst du durch Schritte und Workouts. Jedes neue Level schenkt dir einen Streak Freezer!")),
-        _buildStatTile("Freezer", "${user.streakFreezers}", Icons.ac_unit, Colors.lightBlueAccent, () => _showInfoDialog("Streak Freezer", "Ein Freezer schützt deine Serie automatisch, wenn du dein Ziel mal einen Tag lang nicht erreichst.")),
-      ],
+  Widget _buildStatsGrid(UserModel user, DashboardProvider provider, FirebaseService db) {
+    return StreamBuilder<DailyStatsModel?>(
+      stream: db.getDailyStats(user.id, provider.dateId),
+      builder: (context, snapshot) {
+        int steps = provider.isToday 
+            ? (_todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0)) 
+            : (snapshot.data?.steps ?? 0);
+        
+        double km = (steps * 0.00075); 
+        int kcal = (steps * 0.04).toInt();
+
+        return SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 2.2,
+          ),
+          delegate: SliverChildListDelegate([
+            _buildStatTile("Distanz", "${km.toStringAsFixed(2)} km", Icons.straighten, Colors.blue),
+            _buildStatTile("Kalorien", "$kcal kcal", Icons.local_fire_department, Colors.orange),
+            _buildStatTile("Streak", "${user.streak} Tage", Icons.bolt, Colors.amber),
+            _buildStatTile("Punkte", "${user.points} XP", Icons.stars, Colors.purple),
+          ]),
+        );
+      },
     );
   }
 
-  Widget _buildStatTile(String label, String value, IconData icon, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.light ? Colors.white : Colors.grey[900],
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 4),
-            Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-          ],
-        ),
+  Widget _buildStatTile(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.light ? Colors.white : Colors.grey[900],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        ],
       ),
     );
   }
