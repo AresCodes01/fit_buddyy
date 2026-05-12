@@ -6,10 +6,13 @@ import 'services/firebase_service.dart';
 import 'models/user_model.dart';
 import 'providers/dashboard_provider.dart';
 import 'providers/theme_provider.dart';
+import 'package:fit_buddyy/features/workout/domain/repositories/workout_repository.dart';
+import 'package:fit_buddyy/features/workout/data/repositories/firebase_workout_repository.dart';
+import 'package:fit_buddyy/features/workout/presentation/providers/workout_provider.dart';
 import 'screens/auth_screen.dart';
 import 'screens/dashboard.dart';
+import 'package:fit_buddyy/features/workout/presentation/screens/workout_tracking_screen.dart';
 import 'screens/group_screen.dart';
-import 'screens/workout_screen.dart';
 import 'screens/settings_screen.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'services/background_service.dart';
@@ -41,8 +44,12 @@ class FitBuddyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider<FirebaseService>.value(value: firebaseService),
+        Provider<WorkoutRepository>(create: (_) => FirebaseWorkoutRepository()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
+        ChangeNotifierProvider(
+          create: (context) => WorkoutProvider(context.read<WorkoutRepository>()),
+        ),
         StreamProvider<User?>(
           create: (_) => firebaseService.authState,
           initialData: null,
@@ -150,7 +157,7 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     final List<Widget> children = [
       const Dashboard(),
-      const WorkoutScreen(),
+      const WorkoutTrackingScreen(),
       const GroupScreen(),
       const SettingsScreen(),
     ];

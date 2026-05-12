@@ -154,7 +154,7 @@ class _DashboardState extends State<Dashboard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Moin,", style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+              Text("Hallo,", style: TextStyle(fontSize: 16, color: Colors.grey[600])),
               Text(user.displayName, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
             ],
           ),

@@ -16,7 +16,7 @@ class FirebaseService {
     if (!docSnap.exists) {
       await docRef.set({
         'email': user.email ?? '',
-        'displayName': user.displayName ?? (user.isAnonymous ? 'Gast' : 'User'),
+        'displayName': user.displayName ?? (user.isAnonymous ? 'Fit-Entdecker' : 'User'),
         'photoUrl': user.photoURL ?? '',
         'level': 1,
         'points': 0,
