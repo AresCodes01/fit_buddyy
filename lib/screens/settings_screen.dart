@@ -228,16 +228,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       children: [
         if (user.isAnonymous)
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => db.signOut(),
+                icon: const Icon(Icons.login),
+                label: const Text("Konto erstellen / Einloggen"),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                  backgroundColor: Colors.green,
+                ),
+              ),
+            ),
+          )
+        else
           ListTile(
-            leading: const Icon(Icons.app_registration, color: Colors.green),
-            title: const Text("Jetzt registrieren"),
+            leading: const Icon(Icons.logout, color: Colors.redAccent),
+            title: const Text("Abmelden"),
             onTap: () => db.signOut(),
           ),
-        ListTile(
-          leading: const Icon(Icons.logout, color: Colors.redAccent),
-          title: const Text("Abmelden"),
-          onTap: () => db.signOut(),
-        ),
       ],
     );
   }
