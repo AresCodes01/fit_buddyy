@@ -1,77 +1,55 @@
-import 'dart:async';
 import 'dart:isolate';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Die Einstiegspunkt-Funktion für den Hintergrund-Task.
-// Muss eine Top-Level-Funktion sein.
 @pragma('vm:entry-point')
 void startCallback() {
   FlutterForegroundTask.setTaskHandler(MyTaskHandler());
 }
 
 class MyTaskHandler extends TaskHandler {
-  StreamSubscription<StepCount>? _stepCountSubscription;
-  int _todaySteps = 0;
+  Stream<StepCount>? _stepCountStream;
 
   @override
   void onStart(DateTime timestamp, SendPort? sendPort) async {
-    // Initialisierung, wenn der Task startet
-    _initPedometer(sendPort);
-  }
+    try {
+      _stepCountStream = Pedometer.stepCountStream;
+      _stepCountStream?.listen((event) async {
+        final prefs = await SharedPreferences.getInstance();
+        int lastSteps = prefs.getInt('last_known_steps') ?? 0;
+        int currentSteps = event.steps;
 
-  void _initPedometer(SendPort? sendPort) async {
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateTime.now().toString().split(' ')[0];
-
-    _stepCountSubscription = Pedometer.stepCountStream.listen((StepCount event) {
-      int totalSteps = event.steps;
-      int offset = prefs.getInt('step_offset') ?? totalSteps;
-      String? lastDate = prefs.getString('last_step_date');
-
-      if (lastDate != today) {
-        offset = totalSteps;
-        prefs.setString('last_step_date', today);
-        prefs.setInt('step_offset', offset);
-      }
-
-      _todaySteps = totalSteps - offset;
-      if (_todaySteps < 0) _todaySteps = 0;
-
-      // Update der Benachrichtigung im Hintergrund
-      FlutterForegroundTask.updateService(
-        notificationTitle: 'Fit Buddy ist aktiv',
-        notificationText: 'Heutige Schritte: $_todaySteps',
-      );
-
-      // Daten an die Haupt-App senden, falls diese offen ist
-      sendPort?.send(_todaySteps);
-      
-      // Lokal speichern für später
-      prefs.setInt('last_known_steps', _todaySteps);
-    });
+        if (currentSteps < lastSteps) lastSteps = 0; 
+        
+        await prefs.setInt('last_known_steps', currentSteps);
+        sendPort?.send(currentSteps);
+        
+        FlutterForegroundTask.updateService(
+          notificationTitle: 'Fit Buddy läuft',
+          notificationText: '$currentSteps Schritte heute',
+        );
+      }, onError: (error) {
+        print("Pedometer Stream Error: $error");
+      });
+    } catch (e) {
+      print("Failed to start pedometer: $e");
+    }
   }
 
   @override
-  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {
-    // Wird regelmäßig aufgerufen (Intervall in den Einstellungen festgelegt)
-  }
+  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {}
 
   @override
-  void onDestroy(DateTime timestamp, SendPort? sendPort) async {
-    // Aufräumen
-    await _stepCountSubscription?.cancel();
-  }
+  void onDestroy(DateTime timestamp, SendPort? sendPort) async {}
 }
 
 class BackgroundService {
   static void init() {
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'fit_buddy_channel',
-        channelName: 'Fit Buddy Tracking',
-        channelDescription: 'Zählt deine Schritte im Hintergrund',
+        channelId: 'foreground_service',
+        channelName: 'Foreground Service Notification',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
         iconData: const NotificationIconData(
@@ -94,19 +72,17 @@ class BackgroundService {
     );
   }
 
-  static Future<bool> start() async {
-    if (await FlutterForegroundTask.isRunningService) {
-      return true;
-    }
+  static Future<void> start() async {
+    if (await FlutterForegroundTask.isRunningService) return;
 
-    return await FlutterForegroundTask.startService(
-      notificationTitle: 'Fit Buddy läuft',
+    await FlutterForegroundTask.startService(
+      notificationTitle: 'Fit Buddy ist aktiv',
       notificationText: 'Schritte werden gezählt...',
       callback: startCallback,
     );
   }
 
-  static Future<bool> stop() async {
-    return await FlutterForegroundTask.stopService();
+  static Future<void> stop() async {
+    await FlutterForegroundTask.stopService();
   }
 }

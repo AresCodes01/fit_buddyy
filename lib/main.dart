@@ -2,22 +2,40 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'services/firebase_service.dart';
-import 'models/user_model.dart';
-import 'providers/dashboard_provider.dart';
-import 'providers/theme_provider.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+import 'package:fit_buddyy/core/theme.dart';
+import 'package:fit_buddyy/services/background_service.dart';
+
+// Auth Feature
+import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
+import 'package:fit_buddyy/features/auth/domain/repositories/auth_repository.dart';
+import 'package:fit_buddyy/features/auth/data/repositories/firebase_auth_repository.dart';
+import 'package:fit_buddyy/features/auth/presentation/screens/auth_screen.dart';
+
+// Home Feature
+import 'package:fit_buddyy/features/home/domain/repositories/steps_repository.dart';
+import 'package:fit_buddyy/features/home/data/repositories/firebase_steps_repository.dart';
+import 'package:fit_buddyy/features/home/presentation/screens/dashboard_screen.dart';
+import 'package:fit_buddyy/providers/dashboard_provider.dart';
+
+// Workout Feature
 import 'package:fit_buddyy/features/workout/domain/repositories/workout_repository.dart';
 import 'package:fit_buddyy/features/workout/data/repositories/firebase_workout_repository.dart';
 import 'package:fit_buddyy/features/workout/presentation/providers/workout_provider.dart';
-import 'screens/auth_screen.dart';
-import 'screens/dashboard.dart';
 import 'package:fit_buddyy/features/workout/presentation/screens/workout_tracking_screen.dart';
-import 'screens/group_screen.dart';
-import 'screens/settings_screen.dart';
-import 'package:intl/date_symbol_data_local.dart';
-import 'services/background_service.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:permission_handler/permission_handler.dart';
+
+// Social Feature
+import 'package:fit_buddyy/features/social/domain/repositories/social_repository.dart';
+import 'package:fit_buddyy/features/social/data/repositories/firebase_social_repository.dart';
+import 'package:fit_buddyy/features/social/presentation/screens/group_screen.dart';
+
+// Profile Feature
+import 'package:fit_buddyy/features/profile/presentation/screens/settings_screen.dart';
+
+import 'package:fit_buddyy/providers/theme_provider.dart';
 
 void main() async {
   try {
@@ -25,7 +43,6 @@ void main() async {
     await Firebase.initializeApp();
     await initializeDateFormatting('de_DE', null);
     
-    // Hintergrunddienst initialisieren
     BackgroundService.init();
 
     runApp(const FitBuddyApp());
@@ -39,19 +56,24 @@ class FitBuddyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firebaseService = FirebaseService();
-
     return MultiProvider(
       providers: [
-        Provider<FirebaseService>.value(value: firebaseService),
+        // Repositories
+        Provider<AuthRepository>(create: (_) => FirebaseAuthRepository()),
+        Provider<StepsRepository>(create: (_) => FirebaseStepsRepository()),
+        Provider<SocialRepository>(create: (_) => FirebaseSocialRepository()),
         Provider<WorkoutRepository>(create: (_) => FirebaseWorkoutRepository()),
+        
+        // Providers
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
         ChangeNotifierProvider(
           create: (context) => WorkoutProvider(context.read<WorkoutRepository>()),
         ),
+        
+        // Streams
         StreamProvider<User?>(
-          create: (_) => firebaseService.authState,
+          create: (context) => context.read<AuthRepository>().authStateChanges,
           initialData: null,
         ),
       ],
@@ -67,27 +89,35 @@ class RootApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final firebaseUser = Provider.of<User?>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final firebaseService = Provider.of<FirebaseService>(context, listen: false);
+    final authRepository = Provider.of<AuthRepository>(context, listen: false);
 
     if (firebaseUser == null) {
       return MaterialApp(
         title: 'Fit Buddy',
         debugShowCheckedModeBanner: false,
-        theme: _buildTheme(Brightness.light),
+        theme: FitBuddyTheme.buildTheme(Brightness.light),
         home: const AuthScreen(),
       );
     }
 
     return FutureBuilder(
-      future: firebaseService.syncOrCreateUser(firebaseUser),
+      future: authRepository.syncOrCreateUser(firebaseUser),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return MaterialApp(home: Scaffold(body: Center(child: CircularProgressIndicator(color: const Color(0xFF00BFA5)))));
+          return MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(
+                  color: FitBuddyTheme.primaryColor,
+                ),
+              ),
+            ),
+          );
         }
 
         return StreamProvider<UserModel?>(
           key: ValueKey(firebaseUser.uid),
-          create: (_) => firebaseService.getUserData(firebaseUser.uid),
+          create: (_) => authRepository.getUserData(firebaseUser.uid),
           initialData: null,
           child: Consumer<UserModel?>(
             builder: (context, userModel, child) {
@@ -95,8 +125,8 @@ class RootApp extends StatelessWidget {
                 title: 'Fit Buddy',
                 debugShowCheckedModeBanner: false,
                 themeMode: themeProvider.themeMode,
-                theme: _buildTheme(Brightness.light),
-                darkTheme: _buildTheme(Brightness.dark),
+                theme: FitBuddyTheme.buildTheme(Brightness.light),
+                darkTheme: FitBuddyTheme.buildTheme(Brightness.dark),
                 home: userModel == null 
                   ? const Scaffold(body: Center(child: CircularProgressIndicator()))
                   : const MainNavigation(),
@@ -105,20 +135,6 @@ class RootApp extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  ThemeData _buildTheme(Brightness brightness) {
-    const primaryColor = Color(0xFF00BFA5);
-    return ThemeData(
-      useMaterial3: true,
-      brightness: brightness,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryColor,
-        brightness: brightness,
-        primary: primaryColor,
-      ),
-      scaffoldBackgroundColor: brightness == Brightness.light ? const Color(0xFFF0FDF4) : const Color(0xFF0A1210),
     );
   }
 }
@@ -140,14 +156,12 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void _startBackgroundTracking() async {
-    // Permission für Benachrichtigungen (Android 13+) und Activity Recognition anfragen
     await [
       Permission.notification,
       Permission.activityRecognition,
     ].request();
 
     if (await Permission.activityRecognition.isGranted) {
-      // Kurze Verzögerung für stabilen Start
       await Future.delayed(const Duration(seconds: 1));
       await BackgroundService.start();
     }

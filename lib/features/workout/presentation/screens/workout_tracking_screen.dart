@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:fit_buddyy/models/user_model.dart';
+import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
 import 'package:fit_buddyy/features/workout/domain/models/workout_session.dart';
 import 'package:fit_buddyy/features/workout/domain/repositories/workout_repository.dart';
 import 'package:fit_buddyy/features/workout/presentation/widgets/workout_selection_grid.dart';
@@ -117,7 +117,9 @@ class WorkoutTrackingScreen extends StatelessWidget {
                             child: Text(session.type.icon, style: const TextStyle(fontSize: 20)),
                           ),
                           title: Text(
-                            session.type.label,
+                            session.type == WorkoutType.other && session.customName != null
+                                ? session.customName!
+                                : session.type.label,
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           subtitle: Text(

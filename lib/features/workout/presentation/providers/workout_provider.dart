@@ -24,6 +24,7 @@ class WorkoutProvider extends ChangeNotifier {
     required Duration duration,
     required String intensity,
     required int calories,
+    String? customName,
   }) async {
     if (_selectedType == null) return false;
 
@@ -36,6 +37,7 @@ class WorkoutProvider extends ChangeNotifier {
         userName: userName,
         duration: duration,
         type: _selectedType!,
+        customName: customName,
         calories: calories,
         intensity: intensity,
         timestamp: DateTime.now(),

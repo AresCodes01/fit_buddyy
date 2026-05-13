@@ -19,11 +19,6 @@ class FirebaseWorkoutRepository implements WorkoutRepository {
     batch.set(workoutRef, session.toMap());
 
     // 2. Add to group feeds for each group the user is in
-    // Note: In a real app, we might want to fetch groupIds from the user document here 
-    // or pass them into this method. For this implementation, we'll assume the caller 
-    // provides the session which could be extended or we fetch user data.
-    // To keep it clean as requested, I'll fetch the user document to get groupIds.
-    
     final userDoc = await _firestore.collection('users').doc(session.userId).get();
     final List<String> groupIds = List<String>.from(userDoc.data()?['groupIds'] ?? []);
 
@@ -34,19 +29,23 @@ class FirebaseWorkoutRepository implements WorkoutRepository {
           .collection('messages')
           .doc();
       
+      final workoutLabel = session.type == WorkoutType.other && session.customName != null
+          ? session.customName!
+          : session.type.label;
+
       batch.set(messageRef, {
         'senderId': session.userId,
         'senderName': 'System',
-        'text': '🔥 ${session.userName} hat ein Workout beendet: ${session.type.label} (${session.duration.inMinutes} Min)!',
+        'text': '🔥 ${session.userName} hat ein Workout beendet: $workoutLabel (${session.duration.inMinutes} Min)!',
         'timestamp': FieldValue.serverTimestamp(),
       });
     }
 
-    // 3. Update user stats (e.g. workoutsThisWeek, points)
+    // 3. Update user stats
     final userRef = _firestore.collection('users').doc(session.userId);
     batch.update(userRef, {
       'workoutsThisWeek': FieldValue.increment(1),
-      'points': FieldValue.increment(50), // Example points
+      'points': FieldValue.increment(50),
     });
 
     await batch.commit();

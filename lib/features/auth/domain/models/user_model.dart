@@ -4,7 +4,7 @@ class UserModel {
   final String displayName;
   final String photoUrl;
   final int dailySteps;
-  final int weeklySteps; // Neu hinzugefügt
+  final int weeklySteps;
   final int streak;
   final int level;
   final int points;

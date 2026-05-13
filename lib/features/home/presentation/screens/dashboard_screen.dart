@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import '../models/user_model.dart';
-import '../models/daily_stats_model.dart';
-import '../services/firebase_service.dart';
-import '../providers/dashboard_provider.dart';
-import '../widgets/common_widgets.dart';
-import 'chat_screen.dart';
+import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
+import 'package:fit_buddyy/features/auth/domain/repositories/auth_repository.dart';
+import 'package:fit_buddyy/features/home/domain/models/daily_stats_model.dart';
+import 'package:fit_buddyy/features/home/domain/repositories/steps_repository.dart';
+import 'package:fit_buddyy/features/social/domain/repositories/social_repository.dart';
+import 'package:fit_buddyy/providers/dashboard_provider.dart';
+import 'package:fit_buddyy/widgets/common_widgets.dart';
+import 'package:fit_buddyy/features/social/presentation/screens/chat_screen.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'dart:isolate';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,7 +47,6 @@ class _DashboardState extends State<Dashboard> {
     if (userModel == null) return;
     _lastSeenLevel = userModel.level;
 
-    // Wir warten kurz, falls der Service gerade erst startet
     int retry = 0;
     while (!(await FlutterForegroundTask.isRunningService) && retry < 5) {
       await Future.delayed(const Duration(milliseconds: 500));
@@ -59,7 +60,7 @@ class _DashboardState extends State<Dashboard> {
           setState(() => _todayLiveSteps = message);
           
           final todayId = DateTime.now().toString().split(' ')[0];
-          context.read<FirebaseService>().updateSteps(userModel.id, todayId, message);
+          context.read<StepsRepository>().updateSteps(userModel.id, todayId, message);
         }
       });
     }
@@ -115,7 +116,7 @@ class _DashboardState extends State<Dashboard> {
   Widget build(BuildContext context) {
     final user = context.select<UserModel?, UserModel?>((u) => u);
     final dashboardProvider = context.select<DashboardProvider, DashboardProvider>((p) => p);
-    final db = context.read<FirebaseService>();
+    final stepsRepo = context.read<StepsRepository>();
 
     if (user == null) return const LoadingSpinner();
     _checkLevelUp(user.level);
@@ -128,12 +129,16 @@ class _DashboardState extends State<Dashboard> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  if (user.isAnonymous) ...[
+                    const SizedBox(height: 10),
+                    _buildGuestWarning(context),
+                  ],
                   const SizedBox(height: 20),
                   _buildHeader(user),
                   const SizedBox(height: 10),
                   _buildDateNavigation(context, dashboardProvider),
                   const SizedBox(height: 30),
-                  _buildProgressRing(provider: dashboardProvider, db: db, user: user),
+                  _buildProgressRing(provider: dashboardProvider, stepsRepo: stepsRepo, user: user),
                   const SizedBox(height: 30),
                   const SectionTitle("Dein Status"),
                 ]),
@@ -141,7 +146,7 @@ class _DashboardState extends State<Dashboard> {
             ),
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: _buildStatsGrid(user, dashboardProvider, db),
+              sliver: _buildStatsGrid(user, dashboardProvider, stepsRepo),
             ),
             SliverToBoxAdapter(
               child: Padding(
@@ -149,14 +154,16 @@ class _DashboardState extends State<Dashboard> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       "Deine Gruppen",
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blueAccent),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold, 
+                        fontSize: 18, 
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                     TextButton(
-                      onPressed: () {
-                        // In einer realen App würde man hier den TabController steuern
-                      },
+                      onPressed: () {},
                       child: const Text("Alle zeigen"),
                     ),
                   ],
@@ -166,7 +173,7 @@ class _DashboardState extends State<Dashboard> {
             SliverToBoxAdapter(
               child: SizedBox(
                 height: 160,
-                child: _buildGroupSwiper(user, db),
+                child: _buildGroupSwiper(user, context.read<SocialRepository>()),
               ),
             ),
             SliverPadding(
@@ -175,13 +182,51 @@ class _DashboardState extends State<Dashboard> {
                 delegate: SliverChildListDelegate([
                   const SizedBox(height: 25),
                   const SectionTitle("Wochen-Trend"),
-                  _buildWeeklyChart(db, user.id),
+                  _buildWeeklyChart(stepsRepo, user.id),
                   const SizedBox(height: 30),
                 ]),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildGuestWarning(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: Theme.of(context).colorScheme.onSecondaryContainer, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              "Gast-Modus: Sichere deine Erfolge!",
+              style: TextStyle(
+                fontSize: 14, 
+                color: Theme.of(context).colorScheme.onSecondaryContainer,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () {
+              context.read<AuthRepository>().signOut();
+            },
+            child: const Text("Registrieren", style: TextStyle(fontSize: 13)),
+          ),
+        ],
       ),
     );
   }
@@ -241,11 +286,11 @@ class _DashboardState extends State<Dashboard> {
 
   Widget _buildProgressRing({
     required DashboardProvider provider,
-    required FirebaseService db,
+    required StepsRepository stepsRepo,
     required UserModel user,
   }) {
     return StreamBuilder<DailyStatsModel?>(
-      stream: db.getDailyStats(user.id, provider.dateId),
+      stream: stepsRepo.getDailyStats(user.id, provider.dateId),
       builder: (context, snapshot) {
         int steps = provider.isToday 
             ? (_todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0)) 
@@ -289,7 +334,7 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget _buildGroupSwiper(UserModel user, FirebaseService db) {
+  Widget _buildGroupSwiper(UserModel user, SocialRepository socialRepo) {
     if (user.groupIds.isEmpty) {
       return Center(
         child: Column(
@@ -304,7 +349,7 @@ class _DashboardState extends State<Dashboard> {
     }
 
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: db.getGroups(user.groupIds),
+      stream: socialRepo.getGroups(user.groupIds),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final groups = snapshot.data!;
@@ -314,16 +359,16 @@ class _DashboardState extends State<Dashboard> {
           itemCount: groups.length,
           itemBuilder: (context, index) {
             final group = groups[index];
-            return _buildGroupCard(group, user, db);
+            return _buildGroupCard(group, user, socialRepo);
           },
         );
       },
     );
   }
 
-  Widget _buildGroupCard(Map<String, dynamic> group, UserModel currentUser, FirebaseService db) {
+  Widget _buildGroupCard(Map<String, dynamic> group, UserModel currentUser, SocialRepository socialRepo) {
     return StreamBuilder<List<UserModel>>(
-      stream: db.getGroupMembers(group['id']),
+      stream: socialRepo.getGroupMembers(group['id']),
       builder: (context, snapshot) {
         int rank = 0;
         int totalMembers = 0;
@@ -398,8 +443,8 @@ class _DashboardState extends State<Dashboard> {
                           Text(
                             rank > 0 ? "#$rank von $totalMembers" : "- / -",
                             style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
+                              fontWeight: FontWeight.bold, 
+                              fontSize: 18, 
                               color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
@@ -426,9 +471,9 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget _buildStatsGrid(UserModel user, DashboardProvider provider, FirebaseService db) {
+  Widget _buildStatsGrid(UserModel user, DashboardProvider provider, StepsRepository stepsRepo) {
     return StreamBuilder<DailyStatsModel?>(
-      stream: db.getDailyStats(user.id, provider.dateId),
+      stream: stepsRepo.getDailyStats(user.id, provider.dateId),
       builder: (context, snapshot) {
         int steps = provider.isToday 
             ? (_todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0)) 
@@ -440,9 +485,9 @@ class _DashboardState extends State<Dashboard> {
         return SliverGrid(
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 2.2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.4, // Erhöht von 2.2 auf 1.4 für mehr Platz in der Höhe
           ),
           delegate: SliverChildListDelegate([
             _buildStatTile("Distanz", "${km.toStringAsFixed(2)} km", Icons.straighten, Colors.blue),
@@ -457,44 +502,65 @@ class _DashboardState extends State<Dashboard> {
 
   Widget _buildStatTile(String label, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).brightness == Brightness.light ? Colors.white : Colors.grey[900],
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween, // Verteilt Icon oben und Text unten
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 20),
           ),
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              Text(
+                label,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildWeeklyChart(FirebaseService db, String uid) {
+  Widget _buildWeeklyChart(StepsRepository stepsRepo, String uid) {
     return CustomCard(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       child: SizedBox(
-        height: 180,
+        height: 220,
         child: StreamBuilder<List<DailyStatsModel>>(
-          stream: db.getWeeklyStatsStream(uid),
+          stream: stepsRepo.getWeeklyStatsStream(uid),
           builder: (context, snapshot) {
             if (snapshot.hasError) return const Center(child: Text("Warte auf Daten..."));
             if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text("Noch keine Wochendaten."));
 
-            // DATEN-CLEANUP: Wir gruppieren die Daten nach EINDEUTIGEM Tag
             final Map<String, DailyStatsModel> uniqueStats = {};
             for (var stat in snapshot.data!) {
               final dayKey = DateFormat('yyyy-MM-dd').format(stat.timestamp);
-              // Falls zwei Einträge für einen Tag existieren, behalte den mit mehr Schritten
               if (!uniqueStats.containsKey(dayKey) || stat.steps > uniqueStats[dayKey]!.steps) {
                 uniqueStats[dayKey] = stat;
               }
@@ -531,7 +597,7 @@ class _DashboardState extends State<Dashboard> {
                              padding: const EdgeInsets.only(top: 8.0),
                              child: Text(
                                DateFormat('E', 'de_DE').format(date), 
-                               style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)
+                               style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)
                              ),
                            );
                         }
@@ -553,7 +619,7 @@ class _DashboardState extends State<Dashboard> {
                       BarChartRodData(
                         toY: e.value.steps.toDouble(),
                         color: isToday ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                        width: 14,
+                        width: 18,
                         borderRadius: BorderRadius.circular(6),
                       ),
                     ],

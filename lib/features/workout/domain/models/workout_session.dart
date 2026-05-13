@@ -6,6 +6,7 @@ enum WorkoutType {
   yoga('Yoga', '🧘'),
   cycling('Radfahren', '🚴'),
   swimming('Schwimmen', '🏊'),
+  gym('Gym', '🏋️‍♂️'),
   other('Sonstiges', '🔥');
 
   final String label;
@@ -19,6 +20,7 @@ class WorkoutSession {
   final String userName;
   final Duration duration;
   final WorkoutType type;
+  final String? customName; // Neues Feld für "Sonstiges"
   final int calories;
   final String intensity;
   final DateTime timestamp;
@@ -29,6 +31,7 @@ class WorkoutSession {
     required this.userName,
     required this.duration,
     required this.type,
+    this.customName,
     required this.calories,
     required this.intensity,
     required this.timestamp,
@@ -40,6 +43,7 @@ class WorkoutSession {
       'userName': userName,
       'durationMinutes': duration.inMinutes,
       'type': type.name,
+      'customName': customName,
       'calories': calories,
       'intensity': intensity,
       'timestamp': Timestamp.fromDate(timestamp),
@@ -56,6 +60,7 @@ class WorkoutSession {
         (e) => e.name == map['type'],
         orElse: () => WorkoutType.other,
       ),
+      customName: map['customName'],
       calories: map['calories'] ?? 0,
       intensity: map['intensity'] ?? 'Mittel',
       timestamp: (map['timestamp'] as Timestamp).toDate(),
