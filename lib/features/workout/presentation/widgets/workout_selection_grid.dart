@@ -39,7 +39,7 @@ class WorkoutTypeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
         side: BorderSide(
@@ -75,9 +75,7 @@ class WorkoutTypeCard extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+      backgroundColor: Colors.transparent, // Ermöglicht abgerundete Ecken des Sheets
       builder: (context) => const ManualWorkoutInputSheet(),
     );
   }

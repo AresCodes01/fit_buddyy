@@ -5,6 +5,7 @@ import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
 import 'package:fit_buddyy/features/auth/domain/repositories/auth_repository.dart';
 import 'package:fit_buddyy/features/home/domain/repositories/steps_repository.dart';
 import 'package:fit_buddyy/providers/theme_provider.dart';
+import 'package:fit_buddyy/features/auth/presentation/screens/link_account_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -206,7 +207,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () => authRepo.signOut(),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const LinkAccountScreen()),
+                            );
+                          },
                           child: const Text("Jetzt Registrieren / Anmelden"),
                         ),
                       ),
@@ -221,8 +227,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: Switch(value: themeProvider.themeMode == ThemeMode.dark, onChanged: (val) => themeProvider.toggleTheme(val))),
           _buildSettingsTile(context, icon: Icons.flag, title: "Tagesziel Schritte", subtitle: "${user.goalValue} Schritte",
             onTap: () => _showStepGoalDialog(context, stepsRepo, user)),
-          _buildSettingsTile(context, icon: Icons.logout, title: user.isAnonymous ? "Gast-Sitzung beenden" : "Abmelden", titleColor: Colors.red,
-            onTap: () => authRepo.signOut()),
+          if (!user.isAnonymous)
+            _buildSettingsTile(context, icon: Icons.logout, title: "Abmelden", titleColor: Colors.red,
+              onTap: () => authRepo.signOut()),
         ],
       ),
     );

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
+import '../models/raid_model.dart';
 
 abstract class SocialRepository {
   Future<void> createGroup(String name, String userId);
@@ -9,4 +10,9 @@ abstract class SocialRepository {
   Future<void> sendMessage(String gId, String uId, String uName, String msg);
   Stream<QuerySnapshot> getMessages(String gId);
   Future<Map<String, dynamic>?> getGroupById(String groupId);
+
+  // Boss Raid Methods
+  Stream<RaidModel?> getActiveRaid(String groupId);
+  Future<void> contributeToRaid(String groupId, String raidId, String userId, int steps);
+  Future<void> startWeeklyRaid(String groupId);
 }

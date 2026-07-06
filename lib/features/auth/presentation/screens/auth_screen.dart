@@ -99,7 +99,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             await authRepository.signUp(email, password, name);
                           }
                         } catch (e) {
-                          if (mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Fehler: $e')),
                             );
@@ -125,7 +125,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     try {
                       await authRepository.signInAnonymously();
                     } catch (e) {
-                      if (mounted) {
+                      if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Fehler: $e')),
                         );

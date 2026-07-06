@@ -5,4 +5,5 @@ abstract class StepsRepository {
   Stream<List<DailyStatsModel>> getWeeklyStatsStream(String uid);
   Future<void> updateSteps(String uid, String dateId, int steps);
   Future<void> updateStepGoal(String uid, int goal);
+  Future<List<DailyStatsModel>> getHistoricalStats(String uid, int days);
 }

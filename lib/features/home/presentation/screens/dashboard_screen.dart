@@ -11,8 +11,12 @@ import 'package:fit_buddyy/providers/dashboard_provider.dart';
 import 'package:fit_buddyy/widgets/common_widgets.dart';
 import 'package:fit_buddyy/features/social/presentation/screens/chat_screen.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'dart:isolate';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:confetti/confetti.dart';
+import 'package:fit_buddyy/services/vibration_service.dart';
+import 'package:fit_buddyy/providers/ai_buddy_provider.dart';
+import 'package:fit_buddyy/features/home/presentation/screens/ai_buddy_chat_screen.dart';
+import 'package:fit_buddyy/features/auth/presentation/screens/link_account_screen.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -24,11 +28,13 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   int _todayLiveSteps = 0;
   int? _lastSeenLevel;
-  ReceivePort? _receivePort;
+  late ConfettiController _confettiController;
+  int _stepsAtLastFirebaseUpdate = 0;
 
   @override
   void initState() {
     super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 3));
     _loadInitialSteps();
     _initBackgroundListener();
   }
@@ -42,10 +48,46 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
+  void _onReceiveTaskData(Object message) {
+    if (message is int && mounted) {
+      final userModel = Provider.of<UserModel?>(context, listen: false);
+      final dashboardProvider = Provider.of<DashboardProvider>(context, listen: false);
+      if (userModel == null) return;
+
+      setState(() => _todayLiveSteps = message);
+      
+      if (userModel.goalValue > 0 && message >= userModel.goalValue && !dashboardProvider.goalAnimationShownToday) {
+        dashboardProvider.setGoalAnimationShown(true);
+        _confettiController.play();
+        VibrationService.success();
+        Future.delayed(Duration.zero, () {
+          if (mounted) _showLevelUpDialog(title: "ZIEL ERREICHT!", message: "Du hast dein Tagesziel von ${userModel.goalValue} Schritten geschafft!");
+        });
+      }
+
+      // Buffer: Nur an Firebase senden, wenn mindestens 50 Schritte Unterschied oder initial 0
+      if ((message - _stepsAtLastFirebaseUpdate).abs() >= 50 || _stepsAtLastFirebaseUpdate == 0) {
+        _stepsAtLastFirebaseUpdate = message;
+        final todayId = DateTime.now().toString().split(' ')[0];
+        context.read<StepsRepository>().updateSteps(userModel.id, todayId, message);
+      }
+    }
+  }
+
   void _initBackgroundListener() async {
     final userModel = Provider.of<UserModel?>(context, listen: false);
     if (userModel == null) return;
     _lastSeenLevel = userModel.level;
+
+    // Trigger AI motivation - Jetzt entkoppelt und ohne Blockierung
+    Future.delayed(Duration.zero, () {
+      if (mounted) {
+        // Wir fangen Fehler hier ab, damit sie den Start nicht stören
+        context.read<AiBuddyProvider>().fetchDailyMotivation(userModel, _todayLiveSteps).catchError((e) {
+          debugPrint("AI Startup Error: $e");
+        });
+      }
+    });
 
     int retry = 0;
     while (!(await FlutterForegroundTask.isRunningService) && retry < 5) {
@@ -54,34 +96,41 @@ class _DashboardState extends State<Dashboard> {
     }
 
     if (await FlutterForegroundTask.isRunningService) {
-      _receivePort = FlutterForegroundTask.receivePort;
-      _receivePort?.listen((message) {
-        if (message is int && mounted) {
-          setState(() => _todayLiveSteps = message);
-          
-          final todayId = DateTime.now().toString().split(' ')[0];
-          context.read<StepsRepository>().updateSteps(userModel.id, todayId, message);
-        }
-      });
+      FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     }
   }
 
   @override
   void dispose() {
-    _receivePort?.close();
+    FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
+    _confettiController.dispose();
     super.dispose();
   }
 
   void _checkLevelUp(int currentLevel) {
     if (_lastSeenLevel != null && currentLevel > _lastSeenLevel!) {
       _lastSeenLevel = currentLevel;
+      _confettiController.play();
+      VibrationService.levelUp();
       Future.delayed(Duration.zero, () {
-        _showLevelUpDialog(currentLevel);
+        _showLevelUpDialog(level: currentLevel);
       });
     }
   }
 
-  void _showLevelUpDialog(int level) {
+  void _checkGoalReached(int steps, int goal, DashboardProvider provider) {
+    if (!provider.isToday) return; 
+    if (goal > 0 && steps >= goal && !provider.goalAnimationShownToday) {
+      provider.setGoalAnimationShown(true);
+      _confettiController.play();
+      VibrationService.success();
+      Future.delayed(Duration.zero, () {
+        if (mounted) _showLevelUpDialog(title: "ZIEL ERREICHT!", message: "Du hast dein Tagesziel von $goal Schritten geschafft!");
+      });
+    }
+  }
+
+  void _showLevelUpDialog({int? level, String? title, String? message}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -90,9 +139,9 @@ class _DashboardState extends State<Dashboard> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text("🎉", style: TextStyle(fontSize: 50)),
-            const Text("LEVEL UP!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            Text(title ?? "LEVEL UP!", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            Text("Du hast Level $level erreicht!", style: const TextStyle(fontSize: 18)),
+            Text(message ?? "Du hast Level $level erreicht!", style: const TextStyle(fontSize: 18), textAlign: TextAlign.center),
             const SizedBox(height: 20),
             ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text("Weiter so!")),
           ],
@@ -115,78 +164,202 @@ class _DashboardState extends State<Dashboard> {
   @override
   Widget build(BuildContext context) {
     final user = context.select<UserModel?, UserModel?>((u) => u);
-    final dashboardProvider = context.select<DashboardProvider, DashboardProvider>((p) => p);
+    // WICHTIG: watch nutzen, damit bei JEDER Änderung im Provider (z.B. Pfeil-Klick) 
+    // das gesamte Widget neu gebaut wird!
+    final dashboardProvider = context.watch<DashboardProvider>();
     final stepsRepo = context.read<StepsRepository>();
 
     if (user == null) return const LoadingSpinner();
     _checkLevelUp(user.level);
+    _checkGoalReached(_todayLiveSteps, user.goalValue, dashboardProvider);
 
     return Scaffold(
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  if (user.isAnonymous) ...[
-                    const SizedBox(height: 10),
-                    _buildGuestWarning(context),
-                  ],
-                  const SizedBox(height: 20),
-                  _buildHeader(user),
-                  const SizedBox(height: 10),
-                  _buildDateNavigation(context, dashboardProvider),
-                  const SizedBox(height: 30),
-                  _buildProgressRing(provider: dashboardProvider, stepsRepo: stepsRepo, user: user),
-                  const SizedBox(height: 30),
-                  const SectionTitle("Dein Status"),
-                ]),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: _buildStatsGrid(user, dashboardProvider, stepsRepo),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 30, 20, 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Deine Gruppen",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold, 
-                        fontSize: 18, 
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text("Alle zeigen"),
-                    ),
-                  ],
+        child: Stack(
+          children: [
+            CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      if (user.isAnonymous) ...[
+                        const SizedBox(height: 10),
+                        _buildGuestWarning(context),
+                      ],
+                      const SizedBox(height: 20),
+                      _buildHeader(user),
+                      const SizedBox(height: 10),
+                      _buildAiBuddyCard(context, user),
+                      const SizedBox(height: 10),
+                      _buildDateNavigation(context, dashboardProvider),
+                      const SizedBox(height: 30),
+                      _buildProgressRing(provider: dashboardProvider, stepsRepo: stepsRepo, user: user),
+                      const SizedBox(height: 30),
+                      const SectionTitle("Dein Status"),
+                    ]),
+                  ),
                 ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: _buildStatsGrid(user, dashboardProvider, stepsRepo),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 30, 20, 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Deine Gruppen",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold, 
+                            fontSize: 18, 
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {},
+                          child: const Text("Alle zeigen"),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 160,
+                    child: _buildGroupSwiper(user, context.read<SocialRepository>()),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      const SizedBox(height: 25),
+                      const SectionTitle("Wochen-Trend"),
+                      _buildWeeklyChart(stepsRepo, user.id),
+                      const SizedBox(height: 30),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
+            Align(
+              alignment: Alignment.topCenter,
+              child: ConfettiWidget(
+                confettiController: _confettiController,
+                blastDirectionality: BlastDirectionality.explosive,
+                shouldLoop: false,
+                colors: const [Colors.green, Colors.blue, Colors.pink, Colors.orange, Colors.purple],
               ),
             ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 160,
-                child: _buildGroupSwiper(user, context.read<SocialRepository>()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAiBuddyCard(BuildContext context, UserModel user) {
+    if (user.isAnonymous) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Text("🔒", style: TextStyle(fontSize: 32)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "KI Buddy gesperrt",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    "Registriere dich, um deinen persönlichen KI-Buddy freizuschalten!",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
               ),
             ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  const SizedBox(height: 25),
-                  const SectionTitle("Wochen-Trend"),
-                  _buildWeeklyChart(stepsRepo, user.id),
-                  const SizedBox(height: 30),
-                ]),
+          ],
+        ),
+      );
+    }
+
+    final aiProvider = Provider.of<AiBuddyProvider>(context);
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AiBuddyChatScreen(),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.8),
+              Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.8),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          children: [
+            const Text("🤖", style: TextStyle(fontSize: 32)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Fit Buddyy Nachricht",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  aiProvider.isLoading
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(
+                          aiProvider.dailyMotivation,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                ],
               ),
             ),
+            const Icon(Icons.chevron_right, color: Colors.grey),
           ],
         ),
       ),
@@ -222,9 +395,12 @@ class _DashboardState extends State<Dashboard> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: () {
-              context.read<AuthRepository>().signOut();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LinkAccountScreen()),
+              );
             },
-            child: const Text("Registrieren", style: TextStyle(fontSize: 13)),
+            child: const Text("Jetzt sichern", style: TextStyle(fontSize: 13)),
           ),
         ],
       ),
@@ -252,7 +428,7 @@ class _DashboardState extends State<Dashboard> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text("Lvl ${user.level}", style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
@@ -279,7 +455,14 @@ class _DashboardState extends State<Dashboard> {
       children: [
         IconButton(icon: const Icon(Icons.arrow_back_ios, size: 18), onPressed: provider.previousDay),
         Text(provider.formattedDate, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-        IconButton(icon: const Icon(Icons.arrow_forward_ios, size: 18), onPressed: provider.nextDay),
+        IconButton(
+          icon: Icon(
+            Icons.arrow_forward_ios, 
+            size: 18, 
+            color: provider.canGoNext ? null : Colors.grey.withValues(alpha: 0.3),
+          ), 
+          onPressed: provider.canGoNext ? provider.nextDay : null,
+        ),
       ],
     );
   }
@@ -290,12 +473,29 @@ class _DashboardState extends State<Dashboard> {
     required UserModel user,
   }) {
     return StreamBuilder<DailyStatsModel?>(
+      key: ValueKey("steps_${provider.dateId}"), // Eindeutiger Key pro Tag
       stream: stepsRepo.getDailyStats(user.id, provider.dateId),
       builder: (context, snapshot) {
-        int steps = provider.isToday 
-            ? (_todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0)) 
-            : (snapshot.data?.steps ?? 0);
-        double progress = (steps / user.goalValue).clamp(0.0, 1.0);
+        // Logik für die Anzeige:
+        int steps = 0;
+        if (provider.isToday) {
+          // Heute: Live-Schritte oder letzter bekannter Wert
+          steps = _todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0);
+        } else {
+          // Historie: Nur die Daten aus dem Snapshot
+          steps = snapshot.data?.steps ?? 0;
+          
+          // Falls wir noch laden, zeigen wir kurz einen Spinner
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const SizedBox(
+              width: 200,
+              height: 200,
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+        }
+
+        double progress = user.goalValue > 0 ? (steps / user.goalValue).clamp(0.0, 1.0) : 0.0;
 
         return Center(
           child: Stack(
@@ -308,7 +508,7 @@ class _DashboardState extends State<Dashboard> {
                   value: progress,
                   strokeWidth: 14,
                   strokeCap: StrokeCap.round,
-                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                   color: Theme.of(context).colorScheme.primary,
                 ),
               ),
@@ -405,7 +605,7 @@ class _DashboardState extends State<Dashboard> {
                 gradient: LinearGradient(
                   colors: [
                     Theme.of(context).colorScheme.surface,
-                    Theme.of(context).colorScheme.primaryContainer.withOpacity(0.1),
+                    Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.1),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -473,11 +673,15 @@ class _DashboardState extends State<Dashboard> {
 
   Widget _buildStatsGrid(UserModel user, DashboardProvider provider, StepsRepository stepsRepo) {
     return StreamBuilder<DailyStatsModel?>(
+      key: ValueKey("stats_${provider.dateId}"), // Zwingt zum Neuzeichnen bei Datumswechsel
       stream: stepsRepo.getDailyStats(user.id, provider.dateId),
       builder: (context, snapshot) {
-        int steps = provider.isToday 
-            ? (_todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0)) 
-            : (snapshot.data?.steps ?? 0);
+        int steps = 0;
+        if (provider.isToday) {
+          steps = _todayLiveSteps > 0 ? _todayLiveSteps : (snapshot.data?.steps ?? 0);
+        } else {
+          steps = snapshot.data?.steps ?? 0;
+        }
         
         double km = (steps * 0.00075); 
         int kcal = (steps * 0.04).toInt();
@@ -487,7 +691,7 @@ class _DashboardState extends State<Dashboard> {
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 1.4, // Erhöht von 2.2 auf 1.4 für mehr Platz in der Höhe
+            childAspectRatio: 1.4,
           ),
           delegate: SliverChildListDelegate([
             _buildStatTile("Distanz", "${km.toStringAsFixed(2)} km", Icons.straighten, Colors.blue),
@@ -508,7 +712,7 @@ class _DashboardState extends State<Dashboard> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           )
@@ -521,7 +725,7 @@ class _DashboardState extends State<Dashboard> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 20),
@@ -618,7 +822,7 @@ class _DashboardState extends State<Dashboard> {
                     barRods: [
                       BarChartRodData(
                         toY: e.value.steps.toDouble(),
-                        color: isToday ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                        color: isToday ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
                         width: 18,
                         borderRadius: BorderRadius.circular(6),
                       ),

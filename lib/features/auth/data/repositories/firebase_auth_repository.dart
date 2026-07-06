@@ -98,4 +98,22 @@ class FirebaseAuthRepository implements AuthRepository {
       await _db.collection('users').doc(uid).update({'displayName': newName});
     }
   }
+
+  @override
+  Future<void> linkAnonymousAccount(String email, String password, String name) async {
+    final user = _auth.currentUser;
+    if (user == null || !user.isAnonymous) return;
+
+    AuthCredential credential = EmailAuthProvider.credential(email: email, password: password);
+    UserCredential userCredential = await user.linkWithCredential(credential);
+    
+    if (userCredential.user != null) {
+      await userCredential.user!.updateDisplayName(name);
+      await _db.collection('users').doc(userCredential.user!.uid).update({
+        'email': email,
+        'displayName': name,
+        'isAnonymous': false,
+      });
+    }
+  }
 }

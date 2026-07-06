@@ -12,4 +12,5 @@ abstract class AuthRepository {
   Future<void> updateProfilePicture(String uid, String url);
   Future<void> updateEmail(String newEmail);
   Future<void> updateDisplayName(String uid, String newName);
+  Future<void> linkAnonymousAccount(String email, String password, String name);
 }

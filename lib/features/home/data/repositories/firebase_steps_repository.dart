@@ -74,6 +74,38 @@ class FirebaseStepsRepository implements StepsRepository {
       'level': newLevel,
       'streakFreezers': streakFreezers,
     });
+
+    // Add Raid contribution
+    int stepDelta = steps - oldSteps;
+    if (stepDelta > 0) {
+      for (String gId in groupIds) {
+        // Wir suchen nach allen Raids, die noch nicht beendet sind (flexiblere Abfrage)
+        final raidQuery = await _db.collection('groups').doc(gId).collection('raids').get();
+
+        for (var raidDoc in raidQuery.docs) {
+          final data = raidDoc.data();
+          final isDefeated = data['status'] == 'defeated' || data['isCompleted'] == true;
+          final endDate = (data['endDate'] as Timestamp).toDate();
+          
+          if (!isDefeated && endDate.isAfter(DateTime.now())) {
+            int targetSteps = data['targetSteps'] ?? 100000;
+            int currentSteps = data['currentSteps'] ?? 0;
+            
+            Map<String, dynamic> updates = {
+              'currentSteps': FieldValue.increment(stepDelta),
+              'participants.$uid': FieldValue.increment(stepDelta),
+            };
+
+            if (currentSteps + stepDelta >= targetSteps) {
+              updates['status'] = 'defeated';
+              updates['isCompleted'] = true; // Setze beide für Kompatibilität
+            }
+
+            batch.update(raidDoc.reference, updates);
+          }
+        }
+      }
+    }
     
     await batch.commit();
   }
@@ -81,5 +113,17 @@ class FirebaseStepsRepository implements StepsRepository {
   @override
   Future<void> updateStepGoal(String uid, int goal) async {
     await _db.collection('users').doc(uid).update({'goalValue': goal});
+  }
+
+  @override
+  Future<List<DailyStatsModel>> getHistoricalStats(String uid, int days) async {
+    final now = DateTime.now();
+    final startDate = now.subtract(Duration(days: days));
+    final query = await _db.collection('users').doc(uid).collection('daily_stats')
+        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+        .orderBy('timestamp', descending: true)
+        .get();
+
+    return query.docs.map((doc) => DailyStatsModel.fromMap(doc.data(), doc.id)).toList();
   }
 }

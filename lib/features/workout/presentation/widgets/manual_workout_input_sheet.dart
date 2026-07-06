@@ -31,9 +31,13 @@ class _ManualWorkoutInputSheetState extends State<ManualWorkoutInputSheet> {
 
     if (type == null) return const SizedBox.shrink();
 
-    return Padding(
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
+        bottom: MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom + 20,
         left: 24,
         right: 24,
         top: 24,
@@ -70,7 +74,7 @@ class _ManualWorkoutInputSheetState extends State<ManualWorkoutInputSheet> {
                 decoration: InputDecoration(
                   hintText: "z.B. Fußball, Klettern...",
                   filled: true,
-                  fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -94,7 +98,7 @@ class _ManualWorkoutInputSheetState extends State<ManualWorkoutInputSheet> {
                     style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,

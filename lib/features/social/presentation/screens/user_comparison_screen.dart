@@ -79,7 +79,7 @@ class UserComparisonScreen extends StatelessWidget {
               Expanded(
                 child: LinearProgressIndicator(
                   value: (val1 + val2 == 0) ? 0.5 : val1 / (val1 + val2),
-                  backgroundColor: Colors.red.withOpacity(0.2),
+                  backgroundColor: Colors.red.withValues(alpha: 0.2),
                   color: Colors.green,
                   minHeight: 10,
                   borderRadius: BorderRadius.circular(10),

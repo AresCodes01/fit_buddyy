@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 class AppConstants {
   static const double defaultPadding = 16.0;
   static const double largePadding = 24.0;

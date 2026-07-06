@@ -1,4 +1,5 @@
-import 'dart:isolate';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,7 +13,7 @@ class MyTaskHandler extends TaskHandler {
   Stream<StepCount>? _stepCountStream;
 
   @override
-  void onStart(DateTime timestamp, SendPort? sendPort) async {
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     try {
       _stepCountStream = Pedometer.stepCountStream;
       _stepCountStream?.listen((event) async {
@@ -23,25 +24,25 @@ class MyTaskHandler extends TaskHandler {
         if (currentSteps < lastSteps) lastSteps = 0; 
         
         await prefs.setInt('last_known_steps', currentSteps);
-        sendPort?.send(currentSteps);
+        FlutterForegroundTask.sendDataToMain(currentSteps);
         
         FlutterForegroundTask.updateService(
           notificationTitle: 'Fit Buddy läuft',
           notificationText: '$currentSteps Schritte heute',
         );
       }, onError: (error) {
-        print("Pedometer Stream Error: $error");
+        debugPrint("Pedometer Stream Error: $error");
       });
     } catch (e) {
-      print("Failed to start pedometer: $e");
+      debugPrint("Failed to start pedometer: $e");
     }
   }
 
   @override
-  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {}
+  void onRepeatEvent(DateTime timestamp) async {}
 
   @override
-  void onDestroy(DateTime timestamp, SendPort? sendPort) async {}
+  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {}
 }
 
 class BackgroundService {
@@ -52,19 +53,13 @@ class BackgroundService {
         channelName: 'Foreground Service Notification',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
-        iconData: const NotificationIconData(
-          resType: ResourceType.mipmap,
-          resPrefix: ResourcePrefix.ic,
-          name: 'launcher',
-        ),
       ),
       iosNotificationOptions: const IOSNotificationOptions(
         showNotification: true,
         playSound: false,
       ),
-      foregroundTaskOptions: const ForegroundTaskOptions(
-        interval: 5000,
-        isOnceEvent: false,
+      foregroundTaskOptions: ForegroundTaskOptions(
+        eventAction: ForegroundTaskEventAction.repeat(5000),
         autoRunOnBoot: true,
         allowWakeLock: true,
         allowWifiLock: true,

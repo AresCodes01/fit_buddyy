@@ -142,7 +142,12 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             Container(
-              padding: const EdgeInsets.all(8.0),
+              padding: EdgeInsets.only(
+                left: 8,
+                right: 8,
+                top: 8,
+                bottom: MediaQuery.of(context).padding.bottom + 8,
+              ),
               color: Theme.of(context).brightness == Brightness.light
                   ? Colors.white
                   : Colors.grey[900],

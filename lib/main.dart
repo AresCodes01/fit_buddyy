@@ -36,6 +36,9 @@ import 'package:fit_buddyy/features/social/presentation/screens/group_screen.dar
 import 'package:fit_buddyy/features/profile/presentation/screens/settings_screen.dart';
 
 import 'package:fit_buddyy/providers/theme_provider.dart';
+import 'package:fit_buddyy/providers/ai_buddy_provider.dart';
+import 'package:fit_buddyy/services/ai_service.dart';
+import 'package:fit_buddyy/core/config.dart';
 
 void main() async {
   try {
@@ -43,6 +46,12 @@ void main() async {
     await Firebase.initializeApp();
     await initializeDateFormatting('de_DE', null);
     
+    // Initialize AI Service using local config
+    if (AppConfig.aiApiKey.isNotEmpty && AppConfig.aiApiKey != "YOUR_GEMINI_API_KEY_HERE") {
+      AiService().init(AppConfig.aiApiKey);
+    }
+
+    FlutterForegroundTask.initCommunicationPort();
     BackgroundService.init();
 
     runApp(const FitBuddyApp());
@@ -67,6 +76,9 @@ class FitBuddyApp extends StatelessWidget {
         // Providers
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
+        ChangeNotifierProvider(
+          create: (context) => AiBuddyProvider(context.read<StepsRepository>()),
+        ),
         ChangeNotifierProvider(
           create: (context) => WorkoutProvider(context.read<WorkoutRepository>()),
         ),
@@ -188,7 +200,7 @@ class _MainNavigationState extends State<MainNavigation> {
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Home'),
             BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: 'Workouts'),
-            BottomNavigationBarItem(icon: Icon(Icons.group), label: 'Gruppen'),
+            BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'Chats'),
             BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Einstellungen'),
           ],
         ),
