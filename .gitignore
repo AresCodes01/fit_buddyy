@@ -1,5 +1,6 @@
 # Local config
 lib/core/config.dart
+.env
 
 # Miscellaneous
 *.class

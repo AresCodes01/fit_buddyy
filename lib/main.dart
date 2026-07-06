@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'package:fit_buddyy/core/theme.dart';
 import 'package:fit_buddyy/services/background_service.dart';
@@ -38,17 +39,19 @@ import 'package:fit_buddyy/features/profile/presentation/screens/settings_screen
 import 'package:fit_buddyy/providers/theme_provider.dart';
 import 'package:fit_buddyy/providers/ai_buddy_provider.dart';
 import 'package:fit_buddyy/services/ai_service.dart';
-import 'package:fit_buddyy/core/config.dart';
+// import 'package:fit_buddyy/core/config.dart'; // Gelöscht, da jetzt .env genutzt wird
 
 void main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
+    await dotenv.load(fileName: ".env");
     await Firebase.initializeApp();
     await initializeDateFormatting('de_DE', null);
     
-    // Initialize AI Service using local config
-    if (AppConfig.aiApiKey.isNotEmpty && AppConfig.aiApiKey != "YOUR_GEMINI_API_KEY_HERE") {
-      AiService().init(AppConfig.aiApiKey);
+    // Initialize AI Service using environment variable
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    if (apiKey != null && apiKey.isNotEmpty) {
+      AiService().init(apiKey);
     }
 
     FlutterForegroundTask.initCommunicationPort();
