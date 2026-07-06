@@ -28,12 +28,12 @@ class UserComparisonScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 32),
-            _buildStatRow("Schritte heute", currentUser.dailySteps, targetUser.dailySteps),
-            _buildStatRow("Wochenschritte", currentUser.weeklySteps, targetUser.weeklySteps),
-            _buildStatRow("Workouts (Woche)", currentUser.workoutsThisWeek, targetUser.workoutsThisWeek),
-            _buildStatRow("Level", currentUser.level, targetUser.level),
-            _buildStatRow("XP Punkte", currentUser.points, targetUser.points),
-            _buildStatRow("Streak", currentUser.streak, targetUser.streak),
+            _buildStatRow(context, "Schritte heute", currentUser.dailySteps, targetUser.dailySteps),
+            _buildStatRow(context, "Wochenschritte", currentUser.weeklySteps, targetUser.weeklySteps),
+            _buildStatRow(context, "Workouts (Woche)", currentUser.workoutsThisWeek, targetUser.workoutsThisWeek),
+            _buildStatRow(context, "Level", currentUser.level, targetUser.level),
+            _buildStatRow(context, "XP Punkte", currentUser.points, targetUser.points),
+            _buildStatRow(context, "Streak", currentUser.streak, targetUser.streak),
           ],
         ),
       ),
@@ -45,8 +45,11 @@ class UserComparisonScreen extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 40,
-          backgroundImage: user.photoUrl.isNotEmpty ? NetworkImage(user.photoUrl) : null,
-          child: user.photoUrl.isEmpty ? const Icon(Icons.person, size: 40) : null,
+          backgroundColor: Colors.blueGrey,
+          child: Text(
+            user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : "?",
+            style: const TextStyle(fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold),
+          ),
         ),
         const SizedBox(height: 8),
         Text(user.displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -54,7 +57,7 @@ class UserComparisonScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatRow(String label, num val1, num val2) {
+  Widget _buildStatRow(BuildContext context, String label, num val1, num val2) {
     final bool isBetter = val1 >= val2;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -71,7 +74,11 @@ class UserComparisonScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: isBetter ? Colors.green : Colors.black,
+                    color: isBetter
+                        ? Colors.green
+                        : (Theme.of(context).brightness == Brightness.light
+                            ? Colors.black
+                            : Colors.white),
                   ),
                 ),
               ),
@@ -79,7 +86,7 @@ class UserComparisonScreen extends StatelessWidget {
               Expanded(
                 child: LinearProgressIndicator(
                   value: (val1 + val2 == 0) ? 0.5 : val1 / (val1 + val2),
-                  backgroundColor: Colors.red.withValues(alpha: 0.2),
+                  backgroundColor: Colors.red.withValues(alpha: 0.4),
                   color: Colors.green,
                   minHeight: 10,
                   borderRadius: BorderRadius.circular(10),
@@ -93,7 +100,11 @@ class UserComparisonScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: !isBetter ? Colors.green : Colors.black,
+                    color: !isBetter
+                        ? Colors.green
+                        : (Theme.of(context).brightness == Brightness.light
+                            ? Colors.black
+                            : Colors.white),
                   ),
                 ),
               ),

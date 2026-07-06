@@ -15,41 +15,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _isUploading = false;
-
-  Future<void> _pickAndUploadImage(String uid, AuthRepository repo) async {
-    final picker = ImagePicker();
-    try {
-      final XFile? image = await picker.pickImage(
-        source: ImageSource.gallery, 
-        imageQuality: 50,
-        maxWidth: 500,
-      );
-      
-      if (image != null) {
-        setState(() => _isUploading = true);
-        
-        // Simulation eines Uploads: Wir nutzen den Namen des Bildes für einen unique Avatar
-        final String simulatedUrl = "https://api.dicebear.com/7.x/avataaars/svg?seed=${image.name}_${DateTime.now().millisecondsSinceEpoch}";
-        await repo.updateProfilePicture(uid, simulatedUrl);
-        
-        if (mounted) {
-          setState(() => _isUploading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Profilbild aktualisiert!")),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isUploading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Fehler beim Bildladen: $e")),
-        );
-      }
-    }
-  }
-
   void _showEditNameDialog(BuildContext context, AuthRepository repo, UserModel user) {
     final controller = TextEditingController(text: user.displayName);
     showDialog(
@@ -139,28 +104,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           const SizedBox(height: 20),
           Center(
-            child: Stack(
-              children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundImage: user.photoUrl.isNotEmpty ? NetworkImage(user.photoUrl) : null,
-                  child: user.photoUrl.isEmpty ? const Icon(Icons.person, size: 50) : null,
-                ),
-                if (_isUploading)
-                  const Positioned.fill(child: CircularProgressIndicator()),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: GestureDetector(
-                    onTap: () => _pickAndUploadImage(user.id, authRepo),
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle),
-                      child: const Icon(Icons.edit, size: 20, color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
+            child: CircleAvatar(
+              radius: 50,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              child: Text(
+                user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : "?",
+                style: const TextStyle(fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold),
+              ),
             ),
           ),
           const SizedBox(height: 10),

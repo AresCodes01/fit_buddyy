@@ -103,11 +103,22 @@ class _ChatScreenState extends State<ChatScreen> {
                             margin: const EdgeInsets.symmetric(vertical: 8),
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Colors.grey[200],
+                              color: Theme.of(context).brightness == Brightness.light
+                                  ? Colors.grey[200]
+                                  : Colors.white.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Text(msg['text'],
-                                style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                            child: Text(
+                              msg['text'],
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                                color: Theme.of(context).brightness == Brightness.light
+                                    ? Colors.black54
+                                    : Colors.white70,
+                              ),
+                            ),
                           ),
                         );
                       }
@@ -118,20 +129,47 @@ class _ChatScreenState extends State<ChatScreen> {
                           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: isMe ? Theme.of(context).colorScheme.primary : Colors.grey[300],
+                            color: isMe
+                                ? Theme.of(context).colorScheme.primary
+                                : (Theme.of(context).brightness == Brightness.light
+                                    ? Colors.grey[300]
+                                    : Colors.grey[800]),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (!isMe)
-                                Text(msg['senderName'],
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
-                              Text(msg['text'],
-                                  style: TextStyle(color: isMe ? Colors.white : Colors.black)),
-                              Text(DateFormat('HH:mm').format(date),
+                                Text(
+                                  msg['senderName'],
                                   style: TextStyle(
-                                      fontSize: 8, color: isMe ? Colors.white70 : Colors.black54)),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 10,
+                                    color: Theme.of(context).brightness == Brightness.light
+                                        ? Colors.black87
+                                        : Colors.white70,
+                                  ),
+                                ),
+                              Text(
+                                msg['text'],
+                                style: TextStyle(
+                                    color: isMe
+                                        ? Colors.white
+                                        : (Theme.of(context).brightness == Brightness.light
+                                            ? Colors.black
+                                            : Colors.white)),
+                              ),
+                              Text(
+                                DateFormat('HH:mm').format(date),
+                                style: TextStyle(
+                                  fontSize: 8,
+                                  color: isMe
+                                      ? Colors.white70
+                                      : (Theme.of(context).brightness == Brightness.light
+                                          ? Colors.black54
+                                          : Colors.white60),
+                                ),
+                              ),
                             ],
                           ),
                         ),

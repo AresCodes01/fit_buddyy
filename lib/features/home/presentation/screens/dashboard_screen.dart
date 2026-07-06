@@ -411,12 +411,21 @@ class _DashboardState extends State<Dashboard> {
     double xpProgress = (user.points % 500) / 500.0;
     return Row(
       children: [
+        CircleAvatar(
+          radius: 25,
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          child: Text(
+            user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : "?",
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          ),
+        ),
+        const SizedBox(width: 15),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Hallo,", style: TextStyle(fontSize: 16, color: Colors.grey[600])),
-              Text(user.displayName, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+              Text("Hallo,", style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+              Text(user.displayName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
             ],
           ),
         ),
