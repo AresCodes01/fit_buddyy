@@ -15,10 +15,12 @@ class FirebaseAuthRepository implements AuthRepository {
     final docRef = _db.collection('users').doc(user.uid);
     final docSnap = await docRef.get();
 
+    final String nameToSave = user.displayName ?? (user.isAnonymous ? 'Fit-Entdecker' : 'User');
+
     if (!docSnap.exists) {
       await docRef.set({
         'email': user.email ?? '',
-        'displayName': user.displayName ?? (user.isAnonymous ? 'Fit-Entdecker' : 'User'),
+        'displayName': nameToSave,
         'photoUrl': user.photoURL ?? '',
         'level': 1,
         'points': 0,
@@ -33,6 +35,15 @@ class FirebaseAuthRepository implements AuthRepository {
         'goalValue': 10000,
         'createdAt': FieldValue.serverTimestamp(),
       });
+    } else {
+      // WICHTIG: Wenn der Name in Firebase Authentication vorhanden ist, aber in Firestore noch auf "User" steht, aktualisieren
+      final existingData = docSnap.data();
+      if (existingData != null && 
+          (existingData['displayName'] == 'User' || existingData['displayName'] == '') && 
+          user.displayName != null && 
+          user.displayName!.isNotEmpty) {
+        await docRef.update({'displayName': user.displayName});
+      }
     }
   }
 
@@ -60,12 +71,18 @@ class FirebaseAuthRepository implements AuthRepository {
     try {
       UserCredential result = await _auth.createUserWithEmailAndPassword(email: email, password: password);
       if (result.user != null) {
+        // Erst den Namen im Auth-Profil setzen
         await result.user!.updateDisplayName(name);
-        await syncOrCreateUser(result.user!);
+        // Das User-Objekt neu laden, damit der Name sicher im Objekt ist
+        await result.user!.reload();
+        final updatedUser = _auth.currentUser;
+        if (updatedUser != null) {
+          await syncOrCreateUser(updatedUser);
+        }
       }
       return result;
     } catch (e) {
-      return null;
+      rethrow; // Fehler weitergeben für UI-Feedback
     }
   }
 
@@ -115,5 +132,10 @@ class FirebaseAuthRepository implements AuthRepository {
         'isAnonymous': false,
       });
     }
+  }
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email);
   }
 }

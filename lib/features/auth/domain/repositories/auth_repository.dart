@@ -13,4 +13,5 @@ abstract class AuthRepository {
   Future<void> updateEmail(String newEmail);
   Future<void> updateDisplayName(String uid, String newName);
   Future<void> linkAnonymousAccount(String email, String password, String name);
+  Future<void> sendPasswordResetEmail(String email);
 }
