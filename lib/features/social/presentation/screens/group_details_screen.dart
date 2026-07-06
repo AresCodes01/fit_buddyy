@@ -170,9 +170,9 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                   Text("${index + 1}.", style: const TextStyle(fontWeight: FontWeight.bold)),
                                   const SizedBox(width: 8),
                                   CircleAvatar(
-                                    backgroundImage: (member.photoUrl != null && member.photoUrl!.isNotEmpty) 
-                                      ? NetworkImage(member.photoUrl!) : null,
-                                    child: (member.photoUrl == null || member.photoUrl!.isEmpty) ? const Icon(Icons.person) : null,
+                                    backgroundImage: member.photoUrl.isNotEmpty 
+                                      ? NetworkImage(member.photoUrl) : null,
+                                    child: member.photoUrl.isEmpty ? const Icon(Icons.person) : null,
                                   ),
                                 ],
                               ),

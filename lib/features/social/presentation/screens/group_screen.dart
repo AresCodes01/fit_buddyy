@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
 import 'package:fit_buddyy/features/social/domain/repositories/social_repository.dart';
-import 'package:fit_buddyy/features/auth/domain/repositories/auth_repository.dart';
 import 'package:fit_buddyy/features/social/domain/models/raid_model.dart';
 import 'package:fit_buddyy/features/home/presentation/screens/ai_buddy_chat_screen.dart';
 import '../widgets/raid_card.dart';

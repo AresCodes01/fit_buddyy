@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
-import 'package:fit_buddyy/features/auth/domain/repositories/auth_repository.dart';
 import 'package:fit_buddyy/features/home/domain/models/daily_stats_model.dart';
 import 'package:fit_buddyy/features/home/domain/repositories/steps_repository.dart';
 import 'package:fit_buddyy/features/social/domain/repositories/social_repository.dart';

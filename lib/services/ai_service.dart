@@ -1,7 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../features/auth/domain/models/user_model.dart';
 import '../features/home/domain/models/daily_stats_model.dart';
-import 'package:intl/intl.dart';
 
 class AiService {
   static final AiService _instance = AiService._internal();
@@ -20,7 +20,7 @@ class AiService {
       apiKey: _apiKey!,
       requestOptions: const RequestOptions(apiVersion: 'v1beta'),
     );
-    print("AI DEBUG: Initialized with gemini-flash-latest (v1beta)");
+    debugPrint("AI DEBUG: Initialized with gemini-flash-latest (v1beta)");
   }
 
   bool get isInitialized => _model != null;
@@ -42,7 +42,7 @@ Antworte kurz auf Deutsch (max 2 Sätze) mit Emojis.
       final response = await _model!.generateContent([Content.text(prompt)]);
       return response.text ?? "Bleib in Bewegung! 🚀";
     } catch (e) {
-      print("AI ERROR (Motivation): $e");
+      debugPrint("AI ERROR (Motivation): $e");
       return "Ich bin gerade etwas außer Puste. Aber du schaffst das! 💪";
     }
   }
@@ -86,7 +86,7 @@ Antworte kurz, motivierend und auf Deutsch. Nutze Emojis.
       final response = await _model!.generateContent(contents);
       return response.text ?? "Interessante Frage! 👟";
     } catch (e) {
-      print("AI ERROR (Chat): $e");
+      debugPrint("AI ERROR (Chat): $e");
       return "Ups, kleiner Schluckauf. Frag mich gleich nochmal! 😅";
     }
   }

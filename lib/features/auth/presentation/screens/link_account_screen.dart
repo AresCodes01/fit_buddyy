@@ -74,18 +74,16 @@ class _LinkAccountScreenState extends State<LinkAccountScreen> {
                       setState(() => isLoading = true);
                       try {
                         await authRepository.linkAnonymousAccount(email, password, name);
-                        if (mounted) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Konto erfolgreich verknüpft!')),
-                          );
-                        }
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Konto erfolgreich verknüpft!')),
+                        );
+                        Navigator.pop(context);
                       } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Fehler: $e')),
-                          );
-                        }
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Fehler: $e')),
+                        );
                       } finally {
                         if (mounted) setState(() => isLoading = false);
                       }

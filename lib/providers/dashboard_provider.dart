@@ -56,8 +56,6 @@ class DashboardProvider extends ChangeNotifier {
 
   // Setzt den Animations-Status zurück, wenn ein neuer Tag beginnt
   void checkAndResetDailyState() {
-    final now = DateTime.now();
-    final todayId = DateFormat('yyyy-MM-dd').format(now);
     // Hier könnte man den letzten Speicher-Tag prüfen, 
     // aber für den Session-Scope reicht das meistens.
   }

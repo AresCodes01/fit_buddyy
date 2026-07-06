@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
 import 'package:fit_buddyy/features/auth/domain/repositories/auth_repository.dart';
 import 'package:fit_buddyy/features/home/domain/repositories/steps_repository.dart';

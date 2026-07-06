@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../features/auth/domain/models/user_model.dart';
-import '../features/home/domain/models/daily_stats_model.dart';
 import '../features/home/domain/repositories/steps_repository.dart';
 import '../services/ai_service.dart';
 
@@ -10,7 +9,7 @@ class AiBuddyProvider extends ChangeNotifier {
 
   String _dailyMotivation = "Lade Motivation...";
   bool _isLoading = false;
-  List<Map<String, String>> _chatMessages = [];
+  final List<Map<String, String>> _chatMessages = [];
 
   AiBuddyProvider(this._stepsRepo);
 

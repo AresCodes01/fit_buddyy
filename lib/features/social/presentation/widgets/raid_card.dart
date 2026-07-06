@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../domain/models/raid_model.dart';
-import 'package:intl/intl.dart';
 
 class RaidCard extends StatelessWidget {
   final RaidModel raid;
