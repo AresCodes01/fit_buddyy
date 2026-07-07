@@ -75,20 +75,26 @@ class FirebaseSocialRepository implements SocialRepository {
         .map((snap) {
           final now = DateTime.now();
           
-          // 1. Suche nach einem wirklich aktiven Boss
-          final activeDocs = snap.docs.where((doc) {
-            final data = doc.data();
-            final endDate = (data['endDate'] as Timestamp).toDate();
-            final isNotDefeated = data['status'] != 'defeated' && data['isCompleted'] != true;
-            return isNotDefeated && endDate.isAfter(now);
-          }).toList();
+      // Wir holen einfach alle und filtern in Dart (verhindert Index-Fehler)
+          final raids = snap.docs.map((d) => RaidModel.fromMap(d.id, d.data())).toList();
           
-          if (activeDocs.isNotEmpty) {
-            return RaidModel.fromMap(activeDocs.first.id, activeDocs.first.data());
+          // 1. Suche nach dem aktuellsten aktiven Boss
+          final activeRaids = raids.where((r) => r.status == 'active' && r.endDate.isAfter(now)).toList();
+          
+          if (activeRaids.isNotEmpty) {
+            // Sortiere nach Enddatum (bald endend zuerst)
+            activeRaids.sort((a, b) => a.endDate.compareTo(b.endDate));
+            return activeRaids.first;
           }
 
-          // 2. Wenn kein aktiver Boss da ist, prüfen wir, ob wir einen neuen starten müssen
-          // Wir tun dies verzögert, um Endlosschleifen im Stream zu vermeiden
+          // 2. Suche nach dem ZULETZT besiegten Boss der Woche (für das Loot-Overlay)
+          final defeatedRaids = raids.where((r) => r.status == 'defeated').toList();
+          if (defeatedRaids.isNotEmpty) {
+            defeatedRaids.sort((a, b) => b.endDate.compareTo(a.endDate));
+            return defeatedRaids.first;
+          }
+
+          // 3. Wenn gar nichts da ist, starte neuen
           _checkAndStartNewRaid(groupId, snap.docs);
           
           return null;
@@ -136,8 +142,28 @@ class FirebaseSocialRepository implements SocialRepository {
         'participants': participants,
       };
 
-      if (isNowDefeated) {
-        // Generate Loot for the group
+      if (isNowDefeated && data['rewardDistributed'] != true) {
+        // Markiere als belohnt, damit XP nur 1x vergeben werden
+        updateData['rewardDistributed'] = true;
+
+        // 1. XP-Belohnung für alle Teilnehmer (2000 XP)
+        for (String participantId in participants.keys) {
+          final userRef = _db.collection('users').doc(participantId);
+          transaction.update(userRef, {
+            'points': FieldValue.increment(2000),
+          });
+        }
+        
+        // 3. System-Nachricht in den Chat schicken
+        DocumentReference msgRef = _db.collection('groups').doc(groupId).collection('messages').doc();
+        transaction.set(msgRef, {
+          'senderId': 'System',
+          'senderName': 'System',
+          'text': "🎊 DER BOSS WURDE BEZWUNGEN! Alle Teilnehmer erhalten 2000 XP! 🎊",
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+
+        // 2. Beute für das Raid-Dokument generieren
         updateData['rewards'] = {
           'xp': 2000,
           'items': [

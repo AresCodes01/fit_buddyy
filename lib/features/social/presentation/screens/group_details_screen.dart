@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
 import 'package:fit_buddyy/features/social/domain/repositories/social_repository.dart';
@@ -105,31 +104,15 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
               builder: (context, snapshot) {
                 if (snapshot.hasData && snapshot.data != null) {
                   final raid = snapshot.data!;
+                  
+                  // Wenn der Boss besiegt ist, zeige das Overlay EINMAL an
+                  if (raid.status == 'defeated' && !_shownRaids.contains(raid.id)) {
+                    _showRewardOverlay(raid);
+                  }
+                  
                   return DungeonWidget(raid: raid);
                 }
-                
-                // Prüfe auf kürzlich besiegte Bosse für die Animation
-                return StreamBuilder<List<RaidModel>>(
-                  stream: FirebaseFirestore.instance
-                      .collection('groups')
-                      .doc(group['id'])
-                      .collection('raids')
-                      .where('status', isEqualTo: 'defeated')
-                      .orderBy('endDate', descending: true)
-                      .limit(1)
-                      .snapshots()
-                      .map((s) => s.docs.map((d) => RaidModel.fromMap(d.id, d.data())).toList()),
-                  builder: (context, raidSnap) {
-                    if (raidSnap.hasData && raidSnap.data!.isNotEmpty) {
-                      final raid = raidSnap.data!.first;
-                      // Zeige Overlay wenn es neu ist
-                      if (!_shownRaids.contains(raid.id)) {
-                        _showRewardOverlay(raid);
-                      }
-                    }
-                    return const SizedBox.shrink();
-                  },
-                );
+                return const SizedBox.shrink();
               },
             ),
             

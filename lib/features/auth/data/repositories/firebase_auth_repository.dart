@@ -31,7 +31,6 @@ class FirebaseAuthRepository implements AuthRepository {
         'isAnonymous': user.isAnonymous,
         'workoutGoalWeekly': 3,
         'workoutsThisWeek': 0,
-        'streakFreezers': 0,
         'goalValue': 10000,
         'createdAt': FieldValue.serverTimestamp(),
       });

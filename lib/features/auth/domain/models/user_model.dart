@@ -14,7 +14,6 @@ class UserModel {
   final int goalValue;
   final int workoutGoalWeekly;
   final int workoutsThisWeek;
-  final int streakFreezers;
 
   UserModel({
     required this.id,
@@ -32,7 +31,6 @@ class UserModel {
     this.goalValue = 100,
     this.workoutGoalWeekly = 3,
     this.workoutsThisWeek = 0,
-    this.streakFreezers = 0,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> data, String documentId) {
@@ -52,7 +50,6 @@ class UserModel {
       goalValue: data['goalValue'] ?? 100,
       workoutGoalWeekly: data['workoutGoalWeekly'] ?? 3,
       workoutsThisWeek: data['workoutsThisWeek'] ?? 0,
-      streakFreezers: data['streakFreezers'] ?? 0,
     );
   }
 
@@ -72,7 +69,6 @@ class UserModel {
       'goalValue': goalValue,
       'workoutGoalWeekly': workoutGoalWeekly,
       'workoutsThisWeek': workoutsThisWeek,
-      'streakFreezers': streakFreezers,
     };
   }
 }

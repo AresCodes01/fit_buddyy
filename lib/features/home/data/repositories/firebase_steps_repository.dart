@@ -31,7 +31,6 @@ class FirebaseStepsRepository implements StepsRepository {
     final userData = userDoc.data()!;
     int totalPoints = userData['points'] ?? 0;
     int oldLevel = userData['level'] ?? 1;
-    int streakFreezers = userData['streakFreezers'] ?? 0;
     int goalValue = userData['goalValue'] ?? 10000;
     List<dynamic> groupIds = userData['groupIds'] ?? [];
     String displayName = userData['displayName'] ?? 'User';
@@ -52,13 +51,15 @@ class FirebaseStepsRepository implements StepsRepository {
     WriteBatch batch = _db.batch();
     
     if (newLevel > oldLevel) {
-      streakFreezers += 1;
+      // Prüfen, ob wir für dieses Level in diesem Batch schon eine Nachricht haben
+      // oder ob es ein massiver Sprung ist (z.B. Raid Belohnung)
       for (String gId in groupIds) {
         DocumentReference msgRef = _db.collection('groups').doc(gId).collection('messages').doc();
         batch.set(msgRef, {
           'senderId': uid, 'senderName': 'System',
           'text': "🎉 $displayName ist gerade auf Level $newLevel aufgestiegen!",
           'timestamp': FieldValue.serverTimestamp(),
+          'levelTag': "${uid}_$newLevel", // Eindeutiger Tag gegen Duplikate
         });
       }
     }
@@ -72,7 +73,6 @@ class FirebaseStepsRepository implements StepsRepository {
       'weeklySteps': weeklySteps,
       'points': newTotalPoints, 
       'level': newLevel,
-      'streakFreezers': streakFreezers,
     });
 
     // Add Raid contribution
@@ -98,7 +98,29 @@ class FirebaseStepsRepository implements StepsRepository {
 
             if (currentSteps + stepDelta >= targetSteps) {
               updates['status'] = 'defeated';
-              updates['isCompleted'] = true; // Setze beide für Kompatibilität
+              updates['isCompleted'] = true;
+              updates['rewardDistributed'] = true;
+
+              // Belohnung an alle Teilnehmer verteilen
+              Map<String, dynamic> participants = Map<String, dynamic>.from(data['participants'] ?? {});
+              // Aktuellen User hinzufügen, falls noch nicht drin
+              participants[uid] = (participants[uid] ?? 0) + stepDelta;
+
+              for (String pId in participants.keys) {
+                batch.update(_db.collection('users').doc(pId), {
+                  'points': FieldValue.increment(2000),
+                });
+              }
+
+              // System-Nachricht
+              DocumentReference msgRef = _db.collection('groups').doc(gId).collection('messages').doc();
+              batch.set(msgRef, {
+                'senderId': 'System',
+                'senderName': 'System',
+                'text': "🎊 BOSS BESIEGT! 2000 XP Belohnung für alle Teilnehmer! 🎊",
+                'timestamp': FieldValue.serverTimestamp(),
+                'levelTag': "${gId}_victory_${raidDoc.id}",
+              });
             }
 
             batch.update(raidDoc.reference, updates);
