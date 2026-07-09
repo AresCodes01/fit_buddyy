@@ -4,9 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
 import 'package:fit_buddyy/features/social/domain/repositories/social_repository.dart';
 import 'package:fit_buddyy/features/social/domain/models/raid_model.dart';
-import 'package:fit_buddyy/features/gamification/domain/models/item_model.dart';
 import '../widgets/dungeon_widget.dart';
-import '../widgets/boss_defeated_overlay.dart';
 import 'user_comparison_screen.dart';
 
 class GroupDetailsScreen extends StatefulWidget {
@@ -19,40 +17,6 @@ class GroupDetailsScreen extends StatefulWidget {
 }
 
 class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
-  final Set<String> _shownRaids = {};
-
-  void _showRewardOverlay(RaidModel raid) {
-    if (_shownRaids.contains(raid.id)) return;
-    
-    // Simuliere Loot-Konvertierung aus den Map-Daten
-    final loot = [
-      ItemModel(
-        id: 'reward_${raid.id}',
-        name: 'Legendärer Laufschuh',
-        emoji: '👟',
-        rarity: ItemRarity.legendary,
-        bonusType: 'xp_multiplier',
-        bonusValue: 1.5,
-      )
-    ];
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => BossDefeatedOverlay(
-          raid: raid,
-          loot: loot,
-          onDismiss: () {
-            setState(() => _shownRaids.add(raid.id));
-            Navigator.pop(context);
-          },
-        ),
-      );
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final group = widget.group;
@@ -103,14 +67,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
               stream: socialRepo.getActiveRaid(group['id']),
               builder: (context, snapshot) {
                 if (snapshot.hasData && snapshot.data != null) {
-                  final raid = snapshot.data!;
-                  
-                  // Wenn der Boss besiegt ist, zeige das Overlay EINMAL an
-                  if (raid.status == 'defeated' && !_shownRaids.contains(raid.id)) {
-                    _showRewardOverlay(raid);
-                  }
-                  
-                  return DungeonWidget(raid: raid);
+                  return DungeonWidget(raid: snapshot.data!);
                 }
                 return const SizedBox.shrink();
               },

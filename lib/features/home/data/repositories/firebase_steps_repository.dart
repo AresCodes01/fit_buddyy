@@ -46,7 +46,16 @@ class FirebaseStepsRepository implements StepsRepository {
 
     int newTotalPoints = totalPoints + diffXP;
     int newLevel = (newTotalPoints / 500).floor() + 1;
+    
+    // WICHTIG: weeklySteps muss korrekt berechnet werden, falls dailySteps in Firestore 
+    // noch von einem alten Tag stammt. Wir vertrauen hier auf die dateId Logik.
     int weeklySteps = (userData['weeklySteps'] ?? 0) + (steps - oldSteps);
+    
+    // Sicherheitscheck: Falls oldSteps größer ist (neuer Tag Reset), 
+    // dann ist das Delta für weeklySteps einfach die neuen Schritte
+    if (steps < oldSteps) {
+      weeklySteps = (userData['weeklySteps'] ?? 0) + steps;
+    }
 
     WriteBatch batch = _db.batch();
     

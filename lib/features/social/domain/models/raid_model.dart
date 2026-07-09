@@ -44,6 +44,7 @@ class RaidModel {
   final BossType bossType;
   final String status; // active, defeated, failed
   final Map<String, int> participants; // userId -> steps contributed
+  final List<String> claimedBy; // users who claimed/saw the reward
 
   RaidModel({
     required this.id,
@@ -54,6 +55,7 @@ class RaidModel {
     required this.bossType,
     this.status = 'active',
     this.participants = const {},
+    this.claimedBy = const [],
   });
 
   bool get isCompleted => status == 'defeated';
@@ -73,6 +75,7 @@ class RaidModel {
       ),
       status: map['status'] ?? (map['isCompleted'] == true ? 'defeated' : 'active'),
       participants: Map<String, int>.from(map['participants'] ?? {}),
+      claimedBy: List<String>.from(map['claimedBy'] ?? []),
     );
   }
 
@@ -85,6 +88,7 @@ class RaidModel {
       'bossType': bossType.name,
       'status': status,
       'participants': participants,
+      'claimedBy': claimedBy,
     };
   }
 }

@@ -40,9 +40,17 @@ class _DashboardState extends State<Dashboard> {
 
   void _loadInitialSteps() async {
     final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toString().split(' ')[0];
+    final lastSavedDate = prefs.getString('last_step_date') ?? '';
+
     if (mounted) {
       setState(() {
-        _todayLiveSteps = prefs.getInt('last_known_steps') ?? 0;
+        if (lastSavedDate == today) {
+          // Nur laden, wenn es von heute ist
+          _todayLiveSteps = prefs.getInt('last_known_steps_today') ?? 0;
+        } else {
+          _todayLiveSteps = 0;
+        }
       });
     }
   }
@@ -54,6 +62,9 @@ class _DashboardState extends State<Dashboard> {
       if (userModel == null) return;
 
       setState(() => _todayLiveSteps = message);
+
+      // Persistenz für App-Neustarts
+      _saveStepsLocally(message);
       
       if (userModel.goalValue > 0 && message >= userModel.goalValue && !dashboardProvider.goalAnimationShownToday) {
         dashboardProvider.setGoalAnimationShown(true);
@@ -104,6 +115,13 @@ class _DashboardState extends State<Dashboard> {
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     _confettiController.dispose();
     super.dispose();
+  }
+
+  void _saveStepsLocally(int steps) async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toString().split(' ')[0];
+    await prefs.setInt('last_known_steps_today', steps);
+    await prefs.setString('last_step_date', today);
   }
 
   void _checkLevelUp(int currentLevel) {

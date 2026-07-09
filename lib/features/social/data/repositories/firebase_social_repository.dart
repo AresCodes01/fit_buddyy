@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../auth/domain/models/user_model.dart';
-import '../../domain/models/raid_model.dart';
-import '../../domain/repositories/social_repository.dart';
+import 'package:fit_buddyy/features/auth/domain/models/user_model.dart';
+import 'package:fit_buddyy/features/social/domain/models/raid_model.dart';
+import 'package:fit_buddyy/features/social/domain/repositories/social_repository.dart';
 import 'dart:math';
 
 class FirebaseSocialRepository implements SocialRepository {
@@ -40,11 +40,18 @@ class FirebaseSocialRepository implements SocialRepository {
 
   @override
   Stream<List<UserModel>> getGroupMembers(String groupId) {
-    return _db.collection('groups').doc(groupId).snapshots().asyncMap((snap) async {
-      final List<dynamic> memberIds = snap.data()?['members'] ?? [];
-      if (memberIds.isEmpty) return [];
-      final memberSnaps = await _db.collection('users').where(FieldPath.documentId, whereIn: memberIds).get();
-      return memberSnaps.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList();
+    // Listen to group changes to get the latest list of member IDs
+    return _db.collection('groups').doc(groupId).snapshots().asyncExpand((groupSnap) {
+      if (!groupSnap.exists) return Stream.value([]);
+      
+      final List<dynamic> memberIds = groupSnap.data()?['members'] ?? [];
+      if (memberIds.isEmpty) return Stream.value([]);
+      
+      // Return a live stream of member documents to ensure real-time leaderboard updates
+      return _db.collection('users')
+          .where(FieldPath.documentId, whereIn: memberIds)
+          .snapshots()
+          .map((userSnaps) => userSnaps.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList());
     });
   }
 
@@ -162,20 +169,6 @@ class FirebaseSocialRepository implements SocialRepository {
           'text': "🎊 DER BOSS WURDE BEZWUNGEN! Alle Teilnehmer erhalten 2000 XP! 🎊",
           'timestamp': FieldValue.serverTimestamp(),
         });
-
-        // 2. Beute für das Raid-Dokument generieren
-        updateData['rewards'] = {
-          'xp': 2000,
-          'items': [
-            {
-              'name': 'Legendärer Laufschuh',
-              'emoji': '👟',
-              'rarity': 'legendary',
-              'bonusType': 'xp_multiplier',
-              'bonusValue': 1.5,
-            }
-          ]
-        };
       }
       
       transaction.update(raidRef, updateData);
@@ -206,8 +199,16 @@ class FirebaseSocialRepository implements SocialRepository {
       'endDate': Timestamp.fromDate(sunday),
       'status': 'active',
       'participants': {},
+      'claimedBy': [], // Initialize empty
       'weekId': weekId,
       'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Future<void> claimRaidReward(String groupId, String raidId, String userId) async {
+    await _db.collection('groups').doc(groupId).collection('raids').doc(raidId).update({
+      'claimedBy': FieldValue.arrayUnion([userId])
     });
   }
 }

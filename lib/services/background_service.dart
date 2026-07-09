@@ -18,17 +18,33 @@ class MyTaskHandler extends TaskHandler {
       _stepCountStream = Pedometer.stepCountStream;
       _stepCountStream?.listen((event) async {
         final prefs = await SharedPreferences.getInstance();
+        final today = DateTime.now().toString().split(' ')[0];
+        final lastSavedDate = prefs.getString('last_step_date') ?? '';
+        
         int lastSteps = prefs.getInt('last_known_steps') ?? 0;
         int currentSteps = event.steps;
 
-        if (currentSteps < lastSteps) lastSteps = 0; 
+        // Falls ein neuer Tag angebrochen ist, setzen wir den Zähler zurück
+        if (lastSavedDate != today) {
+          lastSteps = currentSteps;
+          await prefs.setString('last_step_date', today);
+          await prefs.setInt('last_known_steps', currentSteps);
+        }
+
+        // Berechnung der heutigen Schritte seit dem Reset/Tagesbeginn
+        // (Wichtig: event.steps ist oft die Gesamtzahl seit Boot)
+        int stepsToday = currentSteps - lastSteps;
+        if (stepsToday < 0) {
+          // Falls das Gerät neu gestartet wurde
+          stepsToday = 0;
+          await prefs.setInt('last_known_steps', currentSteps);
+        }
         
-        await prefs.setInt('last_known_steps', currentSteps);
-        FlutterForegroundTask.sendDataToMain(currentSteps);
+        FlutterForegroundTask.sendDataToMain(stepsToday);
         
         FlutterForegroundTask.updateService(
           notificationTitle: 'Fit Buddy läuft',
-          notificationText: '$currentSteps Schritte heute',
+          notificationText: '$stepsToday Schritte heute',
         );
       }, onError: (error) {
         debugPrint("Pedometer Stream Error: $error");
