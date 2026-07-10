@@ -28,6 +28,9 @@ class FirebaseStepsRepository implements StepsRepository {
     final userDoc = await _db.collection('users').doc(uid).get();
     if (!userDoc.exists) return;
 
+    final statsDoc = await _db.collection('users').doc(uid).collection('daily_stats').doc(dateId).get();
+    bool isFirstUpdateOfDay = !statsDoc.exists;
+
     final userData = userDoc.data()!;
     int totalPoints = userData['points'] ?? 0;
     int oldLevel = userData['level'] ?? 1;
@@ -41,21 +44,30 @@ class FirebaseStepsRepository implements StepsRepository {
     }
 
     int oldSteps = userData['dailySteps'] ?? 0;
-    int oldXPFromSteps = (oldSteps / 100).floor() + (oldSteps >= goalValue ? 50 : 0);
-    int diffXP = newXP - oldXPFromSteps;
+    int oldXPFromSteps = 0;
+    
+    if (!isFirstUpdateOfDay) {
+      // Wenn es nicht das erste Mal heute ist, berechnen wir die Differenz zum vorherigen Wert von HEUTE
+      int stepsTodaySoFar = statsDoc.data()?['steps'] ?? 0;
+      oldXPFromSteps = (stepsTodaySoFar / 100).floor() + (stepsTodaySoFar >= goalValue ? 50 : 0);
+    }
 
+    int diffXP = newXP - oldXPFromSteps;
     int newTotalPoints = totalPoints + diffXP;
     int newLevel = (newTotalPoints / 500).floor() + 1;
     
-    // WICHTIG: weeklySteps muss korrekt berechnet werden, falls dailySteps in Firestore 
-    // noch von einem alten Tag stammt. Wir vertrauen hier auf die dateId Logik.
-    int weeklySteps = (userData['weeklySteps'] ?? 0) + (steps - oldSteps);
-    
-    // Sicherheitscheck: Falls oldSteps größer ist (neuer Tag Reset), 
-    // dann ist das Delta für weeklySteps einfach die neuen Schritte
-    if (steps < oldSteps) {
-      weeklySteps = (userData['weeklySteps'] ?? 0) + steps;
+    // WICHTIG: weeklySteps muss korrekt berechnet werden
+    int weeklyStepsDelta = 0;
+    if (isFirstUpdateOfDay) {
+      // Erster Check-in heute: Alle heutigen Schritte sind neu für die Woche
+      weeklyStepsDelta = steps;
+    } else {
+      // Update im Laufe des Tages: Nur die Differenz zum letzten Stand von HEUTE
+      int stepsTodaySoFar = statsDoc.data()?['steps'] ?? 0;
+      weeklyStepsDelta = steps - stepsTodaySoFar;
     }
+    
+    int weeklySteps = (userData['weeklySteps'] ?? 0) + weeklyStepsDelta;
 
     WriteBatch batch = _db.batch();
     

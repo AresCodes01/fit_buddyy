@@ -42,14 +42,22 @@ class _DashboardState extends State<Dashboard> {
     final prefs = await SharedPreferences.getInstance();
     final today = DateTime.now().toString().split(' ')[0];
     final lastSavedDate = prefs.getString('last_step_date') ?? '';
+    final userModel = Provider.of<UserModel?>(context, listen: false);
 
     if (mounted) {
       setState(() {
         if (lastSavedDate == today) {
-          // Nur laden, wenn es von heute ist
           _todayLiveSteps = prefs.getInt('last_known_steps_today') ?? 0;
+          _stepsAtLastFirebaseUpdate = _todayLiveSteps;
         } else {
           _todayLiveSteps = 0;
+          _stepsAtLastFirebaseUpdate = 0;
+          
+          // Wenn ein neuer Tag ist, forcen wir den Reset in Firebase sofort
+          if (userModel != null) {
+            context.read<StepsRepository>().updateSteps(userModel.id, today, 0);
+            _saveStepsLocally(0);
+          }
         }
       });
     }
